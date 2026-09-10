@@ -2,7 +2,7 @@
 
 Oak & Sparrow Systems Enterprise LLC entry for the AI Infra Summit 2026 Intel Physical AI Challenge.
 
-camera/sensor evidence → perception → VLA proposed action → Gatekeeper authority evaluation → ALLOW / TRANSFORM / HOLD / DENY → controlled actuator → chained outcome receipt. Gatekeeper independently checks evidence, geometry, freshness, uncertainty, policy, and action state before physical effect.
+camera/sensor evidence → perception → VLA proposed action → Gatekeeper authority evaluation → ALLOW / TRANSFORM / HOLD / DENY → controlled actuator → chained outcome receipt. Gatekeeper independently checks evidence, geometry, freshness, uncertainty, policy, and action state before physical effect. The MIT-licensed reference engine in this repository exercises a small declared subset of those checks: actor identity, evidence binding, freshness, workspace occupancy, confidence, action type, target bin, and speed.
 
 ## Where the application lives
 

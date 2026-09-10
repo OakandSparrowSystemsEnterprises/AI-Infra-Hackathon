@@ -4,7 +4,7 @@ Copyright (c) 2026 Oak & Sparrow Systems Enterprise LLC
 
 ## License for this repository
 
-Everything actually distributed in this repository is licensed under the MIT License. The full license text is in the repository root [`LICENSE`](../LICENSE) file.
+Everything actually distributed in this repository is licensed under the MIT License. The full license text is in [`LICENSE`](LICENSE) in this directory and in the repository root [`LICENSE`](../LICENSE). The two files are identical.
 
 That grant covers the code and materials present here: the source under `src/`, the tests under `tests/`, the scripts, the Docker and packaging configuration, the documentation under `docs/`, and the demonstration materials. It includes the local reference authority engine in `src/oasse_physical_ai/policy.py` and the `GatekeeperClient` adapter in `src/oasse_physical_ai/gatekeeper_client.py`.
 
@@ -36,11 +36,11 @@ camera/sensor evidence
   -> Gatekeeper authority evaluation
   -> ALLOW / TRANSFORM / HOLD / DENY
   -> controlled actuator
-  -> sealed receipt
+  -> sealed decision receipt (chained outcome receipt on execution)
 ```
 
-This repository consumes Gatekeeper through the `AuthorityClient` / `GatekeeperClient` API boundary defined in `src/oasse_physical_ai/gatekeeper_client.py`. `GatekeeperClient` is an MIT-licensed HTTP adapter. The service it calls when `AUTHORITY_MODE=live` is the proprietary Gatekeeper production implementation, which is not contained in this repository.
+This repository consumes Gatekeeper through the `AuthorityClient` / `GatekeeperClient` API boundary defined in `src/oasse_physical_ai/gatekeeper_client.py`. `GatekeeperClient` is an MIT-licensed HTTP adapter. The service it is intended to call when `AUTHORITY_MODE=live` is the proprietary Gatekeeper production implementation, which is not contained in this repository.
 
-`ReferenceAuthorityEngine` in `src/oasse_physical_ai/policy.py` is a local, deterministic reference/simulation authority engine. It exists so the integration path is runnable without the production service, for local simulation, CI, judging rehearsals, and failure testing. It is MIT-licensed repository code. It is not the proprietary Gatekeeper production engine and must not be represented as such. Its small declared policy is not the proprietary policy corpus.
+`ReferenceAuthorityEngine` in `src/oasse_physical_ai/policy.py` is a local, deterministic reference/simulation authority engine. It exists so the integration path is runnable without the production service, for local simulation, CI, judging rehearsals, and failure testing. It is MIT-licensed repository code. It is not the proprietary Gatekeeper production engine and is not represented as such. Its small declared policy is not the proprietary policy corpus.
 
 The evidence, action, decision, and receipt contracts that cross that boundary (`EvidenceFrame`, `ProposedAction`, `AuthorityDecision`, `Receipt` in `src/oasse_physical_ai/models.py`) are repository code and are MIT-licensed.

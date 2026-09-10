@@ -4,6 +4,13 @@
 # Ignores local state, secrets, caches, and generated output only.
 # Source, documentation, tests, test fixtures, example configuration, and
 # everything judges need to clone and run the demo stay tracked.
+#
+# Convention: directory names that could plausibly also name a source, docs,
+# or tests directory (data, models, output, receipts, env, camera, ...) are
+# anchored to the repository root and the application root so they can never
+# swallow tracked code. Generated output is expected at one of those two
+# roots. Unambiguous names (tool caches, dot-directories, secrets) match at
+# any depth. Example configuration (*.example.*) is always tracked.
 # =============================================================================
 
 # --- Environment files (templates stay tracked) ------------------------------
@@ -23,11 +30,14 @@ __pycache__/
 
 # --- Virtual environments ----------------------------------------------------
 .venv/
-venv/
-env/
-ENV/
 .direnv/
 pyvenv.cfg
+/venv/
+/env/
+/ENV/
+/oasse-ai-infra-hackathon/venv/
+/oasse-ai-infra-hackathon/env/
+/oasse-ai-infra-hackathon/ENV/
 
 # --- Test, lint, and type-check caches ---------------------------------------
 .pytest_cache/
@@ -47,7 +57,6 @@ dmypy.json
 coverage.xml
 coverage.json
 htmlcov/
-.cache/
 
 # --- Build, dist, and egg metadata -------------------------------------------
 build/
@@ -57,7 +66,6 @@ dist/
 .eggs/
 sdist/
 wheels/
-pip-wheel-metadata/
 MANIFEST
 
 # --- IDE and editor metadata -------------------------------------------------
@@ -72,7 +80,7 @@ MANIFEST
 .ropeproject
 *.sublime-workspace
 .ipynb_checkpoints/
-.claude/settings.local.json
+**/.claude/settings.local.json
 
 # --- OS metadata -------------------------------------------------------------
 .DS_Store
@@ -86,39 +94,63 @@ $RECYCLE.BIN/
 
 # --- Logs --------------------------------------------------------------------
 *.log
-logs/
-log/
+*.log.*
+/logs/
+/log/
+/oasse-ai-infra-hackathon/logs/
+/oasse-ai-infra-hackathon/log/
+lightning_logs/
+wandb/
+mlruns/
 
 # --- Generated receipts (decision and outcome receipt chains) ----------------
-receipts/
-receipt_chain/
+/receipts/
+/receipt_chain/
+/oasse-ai-infra-hackathon/receipts/
+/oasse-ai-infra-hackathon/receipt_chain/
 *.receipt.json
 *.receipts.json
 *.receipt-chain.json
 receipt_chain*.json
 
 # --- Demo output and artifacts -----------------------------------------------
-demo_output/
-demo-output/
-demo_artifacts/
-output/
-outputs/
-artifacts/
-runs/
-results/
+/demo_output/
+/demo-output/
+/demo_artifacts/
+/output/
+/outputs/
+/artifacts/
+/runs/
+/results/
+/oasse-ai-infra-hackathon/demo_output/
+/oasse-ai-infra-hackathon/demo-output/
+/oasse-ai-infra-hackathon/demo_artifacts/
+/oasse-ai-infra-hackathon/output/
+/oasse-ai-infra-hackathon/outputs/
+/oasse-ai-infra-hackathon/artifacts/
+/oasse-ai-infra-hackathon/runs/
+/oasse-ai-infra-hackathon/results/
 *.demo.json
 metrics_snapshot*.json
 
 # --- Temporary camera captures -----------------------------------------------
-captures/
-camera_captures/
-frames/
-snapshots/
+/captures/
+/camera_captures/
+/camera/
+/frames/
+/snapshots/
+/oasse-ai-infra-hackathon/captures/
+/oasse-ai-infra-hackathon/camera_captures/
+/oasse-ai-infra-hackathon/camera/
+/oasse-ai-infra-hackathon/frames/
+/oasse-ai-infra-hackathon/snapshots/
 *.capture.*
 
 # --- Local datasets ----------------------------------------------------------
-data/
-datasets/
+/data/
+/datasets/
+/oasse-ai-infra-hackathon/data/
+/oasse-ai-infra-hackathon/datasets/
 *.h5
 *.hdf5
 *.npy
@@ -128,7 +160,11 @@ datasets/
 
 # --- Local model caches and weights ------------------------------------------
 /models/
+/ov_models/
+/openvino_models/
 /oasse-ai-infra-hackathon/models/
+/oasse-ai-infra-hackathon/ov_models/
+/oasse-ai-infra-hackathon/openvino_models/
 weights/
 checkpoints/
 model_cache/
@@ -141,8 +177,21 @@ huggingface/
 *.safetensors
 *.tflite
 *.engine
+*.gguf
+# OpenVINO IR pairs (.xml + .bin) are ignored only inside model directories.
+# *.xml and *.bin are never ignored globally.
+**/models/**/*.bin
+**/models/**/*.xml
+**/ov_models/**/*.bin
+**/ov_models/**/*.xml
+**/openvino_models/**/*.bin
+**/openvino_models/**/*.xml
+**/weights/**/*.bin
 
-# --- Intel / OpenVINO caches -------------------------------------------------
+# --- Intel / OpenVINO and general tool caches --------------------------------
+.cache/
+/cache/
+/oasse-ai-infra-hackathon/cache/
 .openvino_cache/
 openvino_cache/
 ov_cache/
@@ -158,6 +207,7 @@ credentials.json
 *.credentials
 secrets/
 secrets.*
+!secrets.example.*
 *.secret
 *.token
 token.json
@@ -207,6 +257,21 @@ scratchpad/
 *.rej
 
 # --- Always keep what judges need --------------------------------------------
-# Test fixtures may legitimately contain small data, capture, or receipt
+# Example configuration is always tracked, whatever its extension.
+!*.example.*
+# Test fixtures may legitimately contain small data, capture, model, or receipt
 # samples. Re-include them so the rules above never hide committed fixtures.
 !**/tests/fixtures/**
+# Even under fixtures, never track bytecode, real environment files, or
+# credentials.
+**/tests/fixtures/**/__pycache__/
+**/tests/fixtures/**/*.py[cod]
+**/tests/fixtures/**/.env
+**/tests/fixtures/**/.env.*
+!**/tests/fixtures/**/.env.example
+**/tests/fixtures/**/secrets.*
+!**/tests/fixtures/**/secrets.example.*
+**/tests/fixtures/**/credentials.json
+**/tests/fixtures/**/*.token
+**/tests/fixtures/**/id_rsa*
+**/tests/fixtures/**/id_ed25519*

@@ -11,7 +11,7 @@ class ReferenceAuthorityEngine:
     """Deterministic local reference authority engine for simulation and tests.
 
     This is MIT-licensed repository code. It is deliberately not the
-    proprietary Gatekeeper production engine and must not be represented as
+    proprietary Gatekeeper production engine and is not represented as
     such. It encodes the hackathon's small declared policy semantics so the
     integration path is runnable without the production authority service.
     The production service is reached through GatekeeperClient. See NOTICE.md.
