@@ -5,11 +5,25 @@ from typing import Optional
 
 from .gatekeeper_client import AuthorityClient, build_authority_client
 from .metrics import Metrics
-from .models import DispatchResult, Verdict
+from .models import AuthorityDecision, DispatchResult, Verdict
 from .receipts import ReceiptChain
 from .providers.actuator import SimulatedActuator
 from .providers.perception import MockPerceptionProvider
 from .providers.vla import MockVLAProvider
+
+
+def executable(decision: AuthorityDecision) -> bool:
+    """Only an authorized action may reach the actuator.
+
+    ALLOW executes the proposal. TRANSFORM executes the authorized action and
+    only if it differs from the proposal: the original proposal is never
+    executed under TRANSFORM, whichever engine produced the decision.
+    """
+    if decision.verdict not in {Verdict.ALLOW, Verdict.TRANSFORM} or decision.authorized_action is None:
+        return False
+    if decision.verdict == Verdict.TRANSFORM and decision.authorized_action == decision.original_action:
+        return False
+    return True
 
 
 class PhysicalAIOrchestrator:
@@ -32,7 +46,7 @@ class PhysicalAIOrchestrator:
         actuator_result = {"status": "NOT_EXECUTED", "reason": decision.verdict.value}
         outcome_receipt = None
 
-        if decision.verdict in {Verdict.ALLOW, Verdict.TRANSFORM} and decision.authorized_action is not None:
+        if executable(decision):
             actuator_result = self.actuator.execute(decision.authorized_action)
             executed = True
             outcome_receipt = self.receipts.seal(
@@ -44,6 +58,9 @@ class PhysicalAIOrchestrator:
                     "actuator_result": actuator_result,
                 },
             )
+        elif decision.verdict == Verdict.TRANSFORM:
+            reason = "TRANSFORM_WITHOUT_AUTHORIZED_ACTION" if decision.authorized_action is None else "TRANSFORM_WITHOUT_AUTHORIZED_CHANGE"
+            actuator_result = {"status": "NOT_EXECUTED", "reason": reason}
 
         total_ms = (time.perf_counter_ns() - start) / 1_000_000.0
         self.metrics.record(decision.verdict.value, decision.authority_latency_ms, total_ms)

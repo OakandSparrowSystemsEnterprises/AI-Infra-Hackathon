@@ -6,6 +6,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from typing import Any, Dict
 
+from .gatekeeper_client import configured_authority_mode, describe_authority
 from .models import EvidenceFrame, ProposedAction
 from .orchestrator import PhysicalAIOrchestrator
 
@@ -24,6 +25,8 @@ def health() -> dict:
         "status": "ok",
         "service": "oasse-physical-ai-authority",
         "authority_boundary": "pre-execution",
+        **describe_authority(orchestrator.authority),
+        "authority_mode_setting": configured_authority_mode(),
         "receipt_chain_valid": orchestrator.receipts.verify(),
     }
 

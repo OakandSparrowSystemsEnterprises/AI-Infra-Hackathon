@@ -12,9 +12,23 @@ Gatekeeper is consumed through the `AuthorityClient` / `GatekeeperClient` API bo
 
 `ReferenceAuthorityEngine` in `src/oasse_physical_ai/policy.py` is a local, deterministic reference/simulation authority engine. It exists for local simulation, CI, judging rehearsals, and failure testing. It is MIT-licensed repository code. It is not the proprietary Gatekeeper production engine and is not represented as such.
 
-In the live build, set `AUTHORITY_MODE=live` and `GATEKEEPER_URL` (and `GATEKEEPER_TOKEN` if required) to the governed endpoint, and the same orchestrator will call the production authority service through the same boundary. The default, `AUTHORITY_MODE=reference`, uses the local reference engine, and so does any value other than `live` (matched case-insensitively). The `policy_version` field on every decision identifies which engine produced it (`physical-ai-demo-v1` for the reference engine).
+In the live build, set `AUTHORITY_MODE=live` and `GATEKEEPER_URL` (and `GATEKEEPER_TOKEN` if required) to the governed endpoint, and the same orchestrator will call the production authority service through the same boundary. The default, `AUTHORITY_MODE=reference`, uses the local reference engine, and so does any value other than `live` (matched case-insensitively). The `policy_version` field on every decision identifies which engine produced it (`physical-ai-demo-v1` for the reference engine), and `GET /health` reports the effective `authority_mode`.
 
 See [`NOTICE.md`](NOTICE.md) for the full licensing and IP boundary statement.
+
+## Live-mode contract
+
+`GatekeeperClient` posts `{"evidence": ..., "action": ...}` to `GATEKEEPER_URL/v1/evaluate` and expects a JSON object with `decision_id`, `verdict` (`ALLOW`, `TRANSFORM`, `HOLD`, or `DENY`), and optionally `reason_codes`, `evaluated_at_ms`, `authority_latency_ms` (service-reported), `policy_version`, and `authorized_action`.
+
+The adapter fails closed:
+
+- `ALLOW` executes the proposal exactly as submitted.
+- `TRANSFORM` executes only the `authorized_action` returned by Gatekeeper, given as a full action object or just the changed fields. It never falls back to the original proposal. A `TRANSFORM` with no authorized action, an unusable one, one that leaves the proposal unchanged, or one bound to a different `action_id`, `actor_id`, or `evidence_id` becomes a `HOLD`, with `AUTHORIZED_ACTION_MISSING`, `AUTHORIZED_ACTION_INVALID`, `AUTHORIZED_ACTION_UNCHANGED`, or `AUTHORIZED_ACTION_BINDING_MISMATCH` appended to the service's reason codes.
+- Transport errors, timeouts, and non-2xx statuses become a `HOLD` with `AUTHORITY_UNAVAILABLE` (plus `HTTP_<status>` when a status was received). Bodies that are not JSON or lack required fields become a `HOLD` with `AUTHORITY_RESPONSE_INVALID`. These decisions carry `policy_version` `gatekeeper-live-unavailable`, are sealed into the receipt chain like any other decision, and never reach the actuator.
+
+The orchestrator applies the same rule at the last gate: a `TRANSFORM` whose authorized action equals the proposal is not executed, whichever engine produced it.
+
+`GET /health` reports `authority_mode` (`reference` or `live`, derived from the engine actually wired in), `authority_engine` (its class name), and `authority_mode_setting` (the `AUTHORITY_MODE` value as read). A misconfigured value such as `prod` therefore shows as setting `prod` with effective mode `reference`.
 
 ## Run locally
 
