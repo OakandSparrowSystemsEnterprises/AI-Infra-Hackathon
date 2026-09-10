@@ -13,7 +13,12 @@ class AuthorityClient(Protocol):
 
 
 class GatekeeperClient:
-    """HTTP adapter for the proprietary Gatekeeper authority endpoint."""
+    """HTTP adapter for the Gatekeeper authority endpoint.
+
+    This adapter is MIT-licensed repository code. The Gatekeeper production
+    service it calls (AUTHORITY_MODE=live with GATEKEEPER_URL) is proprietary
+    and is not contained in this repository. See NOTICE.md.
+    """
 
     def __init__(self, base_url: str, token: str = "", timeout_s: float = 2.0) -> None:
         if not base_url:

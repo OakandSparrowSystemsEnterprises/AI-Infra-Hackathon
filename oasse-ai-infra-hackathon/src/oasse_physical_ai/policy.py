@@ -8,10 +8,13 @@ from .models import AuthorityDecision, EvidenceFrame, ProposedAction, Verdict
 
 
 class ReferenceAuthorityEngine:
-    """Deterministic local authority engine for simulation and tests.
+    """Deterministic local reference authority engine for simulation and tests.
 
-    This is deliberately not the proprietary Gatekeeper core. It encodes the
-    hackathon's declared policy semantics so the integration path is runnable.
+    This is MIT-licensed repository code. It is deliberately not the
+    proprietary Gatekeeper production engine and must not be represented as
+    such. It encodes the hackathon's small declared policy semantics so the
+    integration path is runnable without the production authority service.
+    The production service is reached through GatekeeperClient. See NOTICE.md.
     """
 
     def __init__(

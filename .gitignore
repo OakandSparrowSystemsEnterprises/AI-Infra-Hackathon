@@ -1,31 +1,212 @@
-# Built things
-_Debug/
-Compiled/
+# =============================================================================
+# OASSE AI Infra Hackathon - root .gitignore
+#
+# Ignores local state, secrets, caches, and generated output only.
+# Source, documentation, tests, test fixtures, example configuration, and
+# everything judges need to clone and run the demo stay tracked.
+# =============================================================================
 
-# AudioCache can be rebuilt from sources
-AudioCache/
+# --- Environment files (templates stay tracked) ------------------------------
+.env
+.env.*
+.envrc
+!.env.example
+!.env.*.example
+!*.env.example
 
-# Lockfile
-_OpenInEditor.lock
+# --- Python bytecode and caches ----------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
 
-# User settings
-Game.agf.user
-*.crm.user
+# --- Virtual environments ----------------------------------------------------
+.venv/
+venv/
+env/
+ENV/
+.direnv/
+pyvenv.cfg
 
-# Backups
-Game.agf.bak
-backup_acsprset.spr
+# --- Test, lint, and type-check caches ---------------------------------------
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.pytype/
+.hypothesis/
+.dmypy.json
+dmypy.json
+.tox/
+.nox/
 
-# Memory dumps
-*.dmp
+# --- Coverage output ---------------------------------------------------------
+.coverage
+.coverage.*
+coverage.xml
+coverage.json
+htmlcov/
+.cache/
 
-# Temporary files
-# temporarily created during sprite or room background compression
-~aclzw.tmp
-# temporary, main game data, before getting packed into exe
-game28.dta
-# temporary build of the game before being moved to Compiled/ folder
-*.exe
+# --- Build, dist, and egg metadata -------------------------------------------
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+sdist/
+wheels/
+pip-wheel-metadata/
+MANIFEST
 
-# Log files
-warnings.log
+# --- IDE and editor metadata -------------------------------------------------
+.idea/
+.vscode/
+*.code-workspace
+*.swp
+*.swo
+*~
+.spyderproject
+.spyproject
+.ropeproject
+*.sublime-workspace
+.ipynb_checkpoints/
+.claude/settings.local.json
+
+# --- OS metadata -------------------------------------------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# --- Logs --------------------------------------------------------------------
+*.log
+logs/
+log/
+
+# --- Generated receipts (decision and outcome receipt chains) ----------------
+receipts/
+receipt_chain/
+*.receipt.json
+*.receipts.json
+*.receipt-chain.json
+receipt_chain*.json
+
+# --- Demo output and artifacts -----------------------------------------------
+demo_output/
+demo-output/
+demo_artifacts/
+output/
+outputs/
+artifacts/
+runs/
+results/
+*.demo.json
+metrics_snapshot*.json
+
+# --- Temporary camera captures -----------------------------------------------
+captures/
+camera_captures/
+frames/
+snapshots/
+*.capture.*
+
+# --- Local datasets ----------------------------------------------------------
+data/
+datasets/
+*.h5
+*.hdf5
+*.npy
+*.npz
+*.parquet
+*.tfrecord
+
+# --- Local model caches and weights ------------------------------------------
+/models/
+/oasse-ai-infra-hackathon/models/
+weights/
+checkpoints/
+model_cache/
+.huggingface/
+huggingface/
+*.onnx
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.tflite
+*.engine
+
+# --- Intel / OpenVINO caches -------------------------------------------------
+.openvino_cache/
+openvino_cache/
+ov_cache/
+cl_cache/
+.cl_cache/
+*.blob
+*.cl_cache
+*.ov_cache
+
+# --- Credentials -------------------------------------------------------------
+credentials/
+credentials.json
+*.credentials
+secrets/
+secrets.*
+*.secret
+*.token
+token.json
+service-account*.json
+.netrc
+.pypirc
+.aws/
+.gcloud/
+.azure/
+
+# --- Certificates and private keys -------------------------------------------
+*.pem
+*.key
+*.crt
+*.cer
+*.der
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+
+# --- Docker overrides --------------------------------------------------------
+docker-compose.override.yml
+docker-compose.override.yaml
+docker-compose.local.yml
+docker-compose.local.yaml
+compose.override.yml
+compose.override.yaml
+compose.local.yml
+compose.local.yaml
+.docker/
+
+# --- Temp and scratch directories --------------------------------------------
+tmp/
+temp/
+.tmp/
+scratch/
+scratchpad/
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+
+# --- Always keep what judges need --------------------------------------------
+# Test fixtures may legitimately contain small data, capture, or receipt
+# samples. Re-include them so the rules above never hide committed fixtures.
+!**/tests/fixtures/**
