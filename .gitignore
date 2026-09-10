@@ -165,8 +165,10 @@ metrics_snapshot*.json
 /oasse-ai-infra-hackathon/models/
 /oasse-ai-infra-hackathon/ov_models/
 /oasse-ai-infra-hackathon/openvino_models/
-weights/
-checkpoints/
+/weights/
+/checkpoints/
+/oasse-ai-infra-hackathon/weights/
+/oasse-ai-infra-hackathon/checkpoints/
 model_cache/
 .huggingface/
 huggingface/
@@ -259,19 +261,35 @@ scratchpad/
 # --- Always keep what judges need --------------------------------------------
 # Example configuration is always tracked, whatever its extension.
 !*.example.*
-# Test fixtures may legitimately contain small data, capture, model, or receipt
-# samples. Re-include them so the rules above never hide committed fixtures.
-!**/tests/fixtures/**
-# Even under fixtures, never track bytecode, real environment files, or
-# credentials.
-**/tests/fixtures/**/__pycache__/
-**/tests/fixtures/**/*.py[cod]
-**/tests/fixtures/**/.env
-**/tests/fixtures/**/.env.*
-!**/tests/fixtures/**/.env.example
-**/tests/fixtures/**/secrets.*
-!**/tests/fixtures/**/secrets.example.*
-**/tests/fixtures/**/credentials.json
-**/tests/fixtures/**/*.token
-**/tests/fixtures/**/id_rsa*
-**/tests/fixtures/**/id_ed25519*
+# Test fixtures may legitimately contain small dataset, model, capture, or
+# receipt samples. Re-include only those data types under tests/fixtures so
+# the rules above never hide committed fixtures. Everything else (bytecode,
+# caches, editor and OS metadata, environment files, credentials, keys) stays
+# ignored under fixtures too, because only these patterns are re-included.
+!**/tests/fixtures/**/models/
+!**/tests/fixtures/**/weights/
+!**/tests/fixtures/**/checkpoints/
+!**/tests/fixtures/**/*.npy
+!**/tests/fixtures/**/*.npz
+!**/tests/fixtures/**/*.h5
+!**/tests/fixtures/**/*.hdf5
+!**/tests/fixtures/**/*.parquet
+!**/tests/fixtures/**/*.tfrecord
+!**/tests/fixtures/**/*.onnx
+!**/tests/fixtures/**/*.pt
+!**/tests/fixtures/**/*.pth
+!**/tests/fixtures/**/*.ckpt
+!**/tests/fixtures/**/*.safetensors
+!**/tests/fixtures/**/*.tflite
+!**/tests/fixtures/**/*.engine
+!**/tests/fixtures/**/*.gguf
+!**/tests/fixtures/**/*.bin
+!**/tests/fixtures/**/*.xml
+!**/tests/fixtures/**/*.blob
+!**/tests/fixtures/**/*.capture.*
+!**/tests/fixtures/**/*.receipt.json
+!**/tests/fixtures/**/*.receipts.json
+!**/tests/fixtures/**/*.receipt-chain.json
+!**/tests/fixtures/**/receipt_chain*.json
+!**/tests/fixtures/**/*.demo.json
+!**/tests/fixtures/**/metrics_snapshot*.json

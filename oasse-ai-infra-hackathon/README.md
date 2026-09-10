@@ -6,13 +6,13 @@ The demo path is camera/sensor evidence -> perception -> VLA proposal -> Gatekee
 
 ## Gatekeeper IP boundary
 
-This repository is an MIT-licensed integration and demonstration implementation. It does not contain Oak & Sparrow's proprietary Gatekeeper production/runtime source or private policy corpus.
+This repository is an MIT-licensed integration and demonstration implementation. It does not contain Oak & Sparrow's proprietary Gatekeeper production/runtime source or proprietary policy corpus.
 
 Gatekeeper is consumed through the `AuthorityClient` / `GatekeeperClient` API boundary in `src/oasse_physical_ai/gatekeeper_client.py`. `GatekeeperClient` is an MIT-licensed HTTP adapter. The service it is intended to call in the live build is the proprietary Gatekeeper production implementation, which is not contained here.
 
 `ReferenceAuthorityEngine` in `src/oasse_physical_ai/policy.py` is a local, deterministic reference/simulation authority engine. It exists for local simulation, CI, judging rehearsals, and failure testing. It is MIT-licensed repository code. It is not the proprietary Gatekeeper production engine and is not represented as such.
 
-In the live build, set `AUTHORITY_MODE=live` and `GATEKEEPER_URL` (and `GATEKEEPER_TOKEN` if required) to the governed endpoint, and the same orchestrator will call the production authority service through the same boundary. The default, `AUTHORITY_MODE=reference`, uses the local reference engine, and so does any value other than `live`. The `policy_version` field on every decision identifies which engine produced it (`physical-ai-demo-v1` for the reference engine).
+In the live build, set `AUTHORITY_MODE=live` and `GATEKEEPER_URL` (and `GATEKEEPER_TOKEN` if required) to the governed endpoint, and the same orchestrator will call the production authority service through the same boundary. The default, `AUTHORITY_MODE=reference`, uses the local reference engine, and so does any value other than `live` (matched case-insensitively). The `policy_version` field on every decision identifies which engine produced it (`physical-ai-demo-v1` for the reference engine).
 
 See [`NOTICE.md`](NOTICE.md) for the full licensing and IP boundary statement.
 
