@@ -1,0 +1,9 @@
+{
+  "name": "Gatekeeper: Pre-Execution Security for Physical AI",
+  "team": "Oak & Sparrow Systems Enterprise",
+  "challenge": "Intel Physical AI Challenge",
+  "thesis": "Capability proposes. Authority decides. Execution follows authority, not capability.",
+  "demo": "Live perception -> VLA proposal -> Gatekeeper ALLOW/TRANSFORM/HOLD/DENY -> controlled SO-101 actuation -> sealed decision and outcome receipts",
+  "intel_stack": ["Intel Core Ultra", "OpenVINO", "Physical AI Studio", "Robotics AI Suite"],
+  "status": "hackathon skeleton"
+}
