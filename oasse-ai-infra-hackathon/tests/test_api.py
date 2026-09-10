@@ -1,5 +1,6 @@
-import json
+import os
 import unittest
+from unittest import mock
 
 import httpx
 from fastapi.testclient import TestClient
@@ -45,12 +46,19 @@ class ApiTests(unittest.TestCase):
         self.addCleanup(setattr, api.orchestrator, "authority", original)
 
     def test_health_reports_reference_mode_by_default(self):
-        body = self.client.get("/health").json()
+        with mock.patch.dict(os.environ, {}, clear=True):
+            body = self.client.get("/health").json()
         self.assertEqual(body["status"], "ok")
         self.assertEqual(body["authority_mode"], "reference")
         self.assertEqual(body["authority_engine"], "ReferenceAuthorityEngine")
         self.assertEqual(body["authority_mode_setting"], "reference")
         self.assertTrue(body["receipt_chain_valid"])
+
+    def test_health_reports_a_misconfigured_setting_next_to_the_effective_mode(self):
+        with mock.patch.dict(os.environ, {"AUTHORITY_MODE": "prod"}, clear=True):
+            body = self.client.get("/health").json()
+        self.assertEqual(body["authority_mode"], "reference")
+        self.assertEqual(body["authority_mode_setting"], "prod")
 
     def test_health_reports_live_mode_when_gatekeeper_client_is_wired(self):
         self.use_authority(fake_gatekeeper(down))
