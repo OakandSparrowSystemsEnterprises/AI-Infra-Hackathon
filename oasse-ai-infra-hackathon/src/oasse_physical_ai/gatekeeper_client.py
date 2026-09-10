@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional, Protocol, Tuple
 
 import httpx
 
-from .models import AuthorityDecision, EvidenceFrame, ProposedAction, Verdict
+from .models import PHYSICAL_ACTION_FIELDS, AuthorityDecision, EvidenceFrame, ProposedAction, Verdict, physically_changed
 from .policy import ReferenceAuthorityEngine
 
 log = logging.getLogger(__name__)
@@ -34,20 +34,26 @@ AUTHORIZED_ACTION_CONFLICT = "AUTHORIZED_ACTION_CONFLICT"  # ALLOW that carries 
 LIVE_POLICY_VERSION_DEFAULT = "gatekeeper-live"
 LIVE_UNAVAILABLE_POLICY_VERSION = "gatekeeper-live-unavailable"
 
-_ACTION_FIELDS = frozenset(f.name for f in fields(ProposedAction))
 _BOUND_FIELDS = ("action_id", "actor_id", "evidence_id")
-# Fields whose change makes an authorized action physically different from
-# the proposal. metadata and requested_at_ms are informational only.
-_PHYSICAL_FIELDS = ("action_type", "target_bin", "speed_mps", "object_id", "trajectory")
-_SPEED_REL_TOL = 1e-9
+# The only authorized_action fields the adapter applies: the physical fields
+# and the identity fields (accepted solely so rebinding can be detected).
+# metadata and requested_at_ms are informational, are never taken from the
+# service, and keep the proposal's values.
+_ACCEPTED_FIELDS = frozenset(PHYSICAL_ACTION_FIELDS) | frozenset(_BOUND_FIELDS)
+assert _ACCEPTED_FIELDS <= {f.name for f in fields(ProposedAction)}
 
 
 def _is_number(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:  # an int too large for a float
+        return False
 
 
 def _is_text(value: Any) -> bool:
-    return isinstance(value, str) and value != ""
+    return isinstance(value, str) and value.strip() != ""
 
 
 def _valid_override(name: str, value: Any) -> bool:
@@ -56,27 +62,12 @@ def _valid_override(name: str, value: Any) -> bool:
         return _is_text(value)
     if name == "speed_mps":
         return _is_number(value) and value >= 0
-    if name == "requested_at_ms":
-        return _is_number(value) and value >= 0
     if name == "trajectory":
         return (
             isinstance(value, list)
             and len(value) > 0
             and all(isinstance(point, list) and len(point) > 0 and all(_is_number(c) for c in point) for point in value)
         )
-    if name == "metadata":
-        return isinstance(value, dict)
-    return False
-
-
-def _physically_changed(candidate: ProposedAction, original: ProposedAction) -> bool:
-    for name in _PHYSICAL_FIELDS:
-        a, b = getattr(candidate, name), getattr(original, name)
-        if name == "speed_mps":
-            if not math.isclose(a, b, rel_tol=_SPEED_REL_TOL, abs_tol=0.0):
-                return True
-        elif a != b:
-            return True
     return False
 
 
@@ -90,17 +81,15 @@ def _merge_authorized(original: ProposedAction, raw: Any) -> Tuple[Optional[Prop
     """
     if not isinstance(raw, dict):
         return None, AUTHORIZED_ACTION_INVALID, False
-    overrides = {key: value for key, value in raw.items() if key in _ACTION_FIELDS}
+    overrides = {key: value for key, value in raw.items() if key in _ACCEPTED_FIELDS}
     if any(not _valid_override(name, value) for name, value in overrides.items()):
         return None, AUTHORIZED_ACTION_INVALID, False
     if "speed_mps" in overrides:
         overrides["speed_mps"] = float(overrides["speed_mps"])
-    if "requested_at_ms" in overrides:
-        overrides["requested_at_ms"] = int(overrides["requested_at_ms"])
     candidate = replace(original, **overrides)
     if any(getattr(candidate, name) != getattr(original, name) for name in _BOUND_FIELDS):
         return None, AUTHORIZED_ACTION_BINDING_MISMATCH, False
-    return candidate, None, _physically_changed(candidate, original)
+    return candidate, None, physically_changed(candidate, original)
 
 
 def _parse_response(data: Any) -> Dict[str, Any]:
@@ -219,10 +208,10 @@ class GatekeeperClient:
         # Stage 3: interpret the answer.
         try:
             parsed = _parse_response(response.json())
-        except Exception as exc:  # noqa: BLE001 - not JSON, wrong shape, wrong types, pathological nesting
+            return self._decision_from(parsed, evidence, action, start)
+        except Exception as exc:  # noqa: BLE001 - not JSON, wrong shape, wrong types, pathological values
             log.warning("Gatekeeper response malformed (%s) for action %s; holding", type(exc).__name__, action.action_id)
             return self._hold(evidence, action, [AUTHORITY_RESPONSE_INVALID], start)
-        return self._decision_from(parsed, evidence, action, start)
 
     def _decision_from(self, parsed: Dict[str, Any], evidence: EvidenceFrame, action: ProposedAction, start: int) -> AuthorityDecision:
         verdict: Verdict = parsed["verdict"]

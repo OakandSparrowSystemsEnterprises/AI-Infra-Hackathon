@@ -5,7 +5,7 @@ from typing import Optional
 
 from .gatekeeper_client import AuthorityClient, build_authority_client
 from .metrics import Metrics
-from .models import AuthorityDecision, DispatchResult, Verdict
+from .models import AuthorityDecision, DispatchResult, Verdict, physically_changed
 from .receipts import ReceiptChain
 from .providers.actuator import SimulatedActuator
 from .providers.perception import MockPerceptionProvider
@@ -16,12 +16,13 @@ def executable(decision: AuthorityDecision) -> bool:
     """Only an authorized action may reach the actuator.
 
     ALLOW executes the proposal. TRANSFORM executes the authorized action and
-    only if it differs from the proposal: the original proposal is never
-    executed under TRANSFORM, whichever engine produced the decision.
+    only if it differs from the proposal in a physical field: the original
+    proposal is never executed under TRANSFORM, whichever engine produced
+    the decision.
     """
     if decision.verdict not in {Verdict.ALLOW, Verdict.TRANSFORM} or decision.authorized_action is None:
         return False
-    if decision.verdict == Verdict.TRANSFORM and decision.authorized_action == decision.original_action:
+    if decision.verdict == Verdict.TRANSFORM and not physically_changed(decision.authorized_action, decision.original_action):
         return False
     return True
 

@@ -102,6 +102,8 @@ def not_json(request):
 
 
 DEEPLY_NESTED = b"[" * 200_000 + b"]" * 200_000
+HUGE_INT = b"1" + b"0" * 400  # larger than any float; math.isfinite raises OverflowError on it
+TRANSFORM_PREFIX = b'{"decision_id": "gk-decision-1", "verdict": "TRANSFORM", "reason_codes": ["SPEED_CLAMPED"], "policy_version": "gatekeeper-test-v1", "authorized_action": '
 OVERFLOW_TIMESTAMP = b'{"decision_id": "d", "verdict": "ALLOW", "evaluated_at_ms": 1e999}'
 NAN_LATENCY = b'{"decision_id": "d", "verdict": "ALLOW", "authority_latency_ms": NaN}'
 
@@ -212,21 +214,45 @@ class LiveTransformTests(HeldWithoutExecution, unittest.TestCase):
             {"speed_mps": CLAMPED_SPEED, "trajectory": [[0.0, True, 0.0]]},
             {"speed_mps": CLAMPED_SPEED, "target_bin": 123},
             {"speed_mps": CLAMPED_SPEED, "target_bin": ""},
+            {"speed_mps": CLAMPED_SPEED, "target_bin": "   "},
             {"speed_mps": CLAMPED_SPEED, "object_id": {"a": 1}},
-            {"speed_mps": CLAMPED_SPEED, "metadata": "x"},
             {"speed_mps": CLAMPED_SPEED, "action_type": None},
-            {"speed_mps": CLAMPED_SPEED, "requested_at_ms": True},
-            {"speed_mps": CLAMPED_SPEED, "requested_at_ms": -1},
         )
         for bad in unusable:
             orch = live_orchestrator(verdict_service("TRANSFORM", authorized=lambda a, b=bad: b))
             self.assert_held(orch, orch.run("overspeed"), gc.AUTHORIZED_ACTION_INVALID, "SPEED_CLAMPED")
 
-    def test_non_finite_speed_in_authorized_action_holds(self):
-        for token in (b"NaN", b"Infinity", b"-Infinity"):
-            body = b'{"decision_id": "gk-decision-1", "verdict": "TRANSFORM", "reason_codes": ["SPEED_CLAMPED"], "policy_version": "gatekeeper-test-v1", "authorized_action": {"speed_mps": ' + token + b"}}"
+    def test_non_finite_or_oversized_numbers_in_authorized_action_hold(self):
+        for token in (b"NaN", b"Infinity", b"-Infinity", HUGE_INT):
+            body = TRANSFORM_PREFIX + b'{"speed_mps": ' + token + b"}}"
             orch = live_orchestrator(raw_service(body))
             self.assert_held(orch, orch.run("overspeed"), gc.AUTHORIZED_ACTION_INVALID, "SPEED_CLAMPED")
+        body = TRANSFORM_PREFIX + b'{"speed_mps": 0.35, "trajectory": [[' + HUGE_INT + b"]]}}"
+        orch = live_orchestrator(raw_service(body))
+        self.assert_held(orch, orch.run("overspeed"), gc.AUTHORIZED_ACTION_INVALID, "SPEED_CLAMPED")
+
+    def test_informational_fields_are_never_taken_from_the_service(self):
+        """metadata and requested_at_ms stay the proposal's, whatever the service sends."""
+        deep = {"k": None}
+        for _ in range(600):
+            deep = {"k": deep}
+        payloads = (
+            {"speed_mps": CLAMPED_SPEED, "metadata": "x"},
+            {"speed_mps": CLAMPED_SPEED, "metadata": deep},
+            {"speed_mps": CLAMPED_SPEED, "requested_at_ms": True},
+            {"speed_mps": CLAMPED_SPEED, "requested_at_ms": -1},
+            {"speed_mps": CLAMPED_SPEED, "requested_at_ms": 10 ** 400},
+        )
+        for payload in payloads:
+            orch = live_orchestrator(verdict_service("TRANSFORM", authorized=lambda a, p=payload: p))
+            r = orch.run("overspeed")
+            self.assertTrue(r.executed)
+            executed = orch.actuator.calls[0]
+            self.assertEqual(executed.speed_mps, CLAMPED_SPEED)
+            self.assertEqual(executed.metadata, r.decision.original_action.metadata)
+            self.assertEqual(executed.requested_at_ms, r.decision.original_action.requested_at_ms)
+            self.assertEqual(len(orch.receipts.all()), 2)
+            self.assertTrue(orch.receipts.verify())
 
     def test_original_speed_never_reaches_actuator_in_live_mode(self):
         """Whatever a non-ALLOW response looks like, the overspeed proposal is never executed as proposed.
@@ -250,6 +276,8 @@ class LiveTransformTests(HeldWithoutExecution, unittest.TestCase):
             verdict_service("TRANSFORM", authorized=lambda a: {"speed_mps": "fast"}),
             verdict_service("TRANSFORM", authorized=lambda a: {"speed_mps": True}),
             verdict_service("TRANSFORM", authorized=lambda a: {"speed_mps": CLAMPED_SPEED, "trajectory": None}),
+            raw_service(TRANSFORM_PREFIX + b'{"speed_mps": ' + HUGE_INT + b"}}"),
+            raw_service(TRANSFORM_PREFIX + b'{"speed_mps": 0.35, "trajectory": [[' + HUGE_INT + b"]]}}"),
             verdict_service("ALLOW", authorized=lambda a: {"speed_mps": CLAMPED_SPEED}),  # contradictory ALLOW
             verdict_service("HOLD"),
             verdict_service("DENY"),
@@ -444,7 +472,9 @@ class LiveFailureTests(unittest.TestCase):
         ev = EvidenceFrame.fresh()
         action = ProposedAction.pick_place(ev.evidence_id)
         responders = (down, slow, http_503, not_json, raw_service(b""), raw_service(DEEPLY_NESTED),
-                      raw_service(OVERFLOW_TIMESTAMP), lambda request: httpx.Response(200, json=[]))
+                      raw_service(OVERFLOW_TIMESTAMP), lambda request: httpx.Response(200, json=[]),
+                      raw_service(TRANSFORM_PREFIX + b'{"speed_mps": ' + HUGE_INT + b"}}"),
+                      raw_service(b'{"decision_id": "d", "verdict": "ALLOW", "authorized_action": {"trajectory": [[' + HUGE_INT + b"]]}}"))
         for responder in responders:
             d = live_client(responder).evaluate(ev, action)
             self.assertIsInstance(d, AuthorityDecision)
@@ -482,6 +512,10 @@ class ExecutionGateTests(unittest.TestCase):
     def test_transform_with_unchanged_action_is_not_executable(self):
         self.assertFalse(executable(self.make_decision(Verdict.TRANSFORM, "same")))
         self.assertFalse(executable(self.make_decision(Verdict.TRANSFORM, None)))
+        self.assertFalse(executable(self.make_decision(Verdict.TRANSFORM, lambda a: replace(a, metadata={"note": "x"}))))
+        self.assertFalse(executable(self.make_decision(Verdict.TRANSFORM, lambda a: replace(a, requested_at_ms=1))))
+        self.assertFalse(executable(self.make_decision(Verdict.TRANSFORM, lambda a: replace(a, speed_mps=ORIGINAL_SPEED + 2e-16))))
+        self.assertTrue(executable(self.make_decision(Verdict.TRANSFORM, lambda a: replace(a, target_bin="reject"))))
         self.assertTrue(executable(self.make_decision(Verdict.TRANSFORM, lambda a: replace(a, speed_mps=CLAMPED_SPEED))))
         self.assertTrue(executable(self.make_decision(Verdict.ALLOW, "same")))
         self.assertFalse(executable(self.make_decision(Verdict.HOLD, None)))
@@ -496,8 +530,14 @@ class ExecutionGateTests(unittest.TestCase):
             def evaluate(self, evidence, action):
                 return AuthorityDecision("dec-empty", Verdict.TRANSFORM, ["SPEED_CLAMPED"], action, None, evidence, 0, 0.0)
 
+        class CosmeticTransformEngine:
+            def evaluate(self, evidence, action):
+                cosmetic = replace(action, metadata={"note": "relabelled"}, requested_at_ms=1)
+                return AuthorityDecision("dec-cosmetic", Verdict.TRANSFORM, ["SPEED_CLAMPED"], action, cosmetic, evidence, 0, 0.0)
+
         for engine, reason in ((EchoingTransformEngine(), "TRANSFORM_WITHOUT_AUTHORIZED_CHANGE"),
-                               (EmptyTransformEngine(), "TRANSFORM_WITHOUT_AUTHORIZED_ACTION")):
+                               (EmptyTransformEngine(), "TRANSFORM_WITHOUT_AUTHORIZED_ACTION"),
+                               (CosmeticTransformEngine(), "TRANSFORM_WITHOUT_AUTHORIZED_CHANGE")):
             orch = PhysicalAIOrchestrator(engine)
             orch.actuator = RecordingActuator()
             r = orch.run("overspeed")
