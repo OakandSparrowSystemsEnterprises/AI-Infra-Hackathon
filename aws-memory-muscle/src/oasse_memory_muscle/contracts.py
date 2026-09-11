@@ -33,22 +33,53 @@ class EvidenceRef:
 
 @dataclass(frozen=True)
 class ActionEnvelope:
+    # Identity
+    tenant_id: str
+    principal_id: str
+    actor_type: str
+    session_id: str
+    delegation_id: str | None
+
+    # Origin / lineage
+    source: str
+    adapter: str
+    transaction_id: str
+    parent_action_id: str | None
+
+    # Exact effect
+    domain: str
     action_type: str
-    target: str
+    requested_effect: str
+    resource: str
+    destination: str
+
+    # Coding-agent binding
     repository: str
     base_sha: str
     patch_sha256: str
-    actor_id: str
+
+    # Supporting evidence. Evidence never grants authority.
     evidence: tuple[EvidenceRef, ...] = ()
 
     def canonical_dict(self) -> dict[str, Any]:
         return {
+            "tenant_id": self.tenant_id,
+            "principal_id": self.principal_id,
+            "actor_type": self.actor_type,
+            "session_id": self.session_id,
+            "delegation_id": self.delegation_id,
+            "source": self.source,
+            "adapter": self.adapter,
+            "transaction_id": self.transaction_id,
+            "parent_action_id": self.parent_action_id,
+            "domain": self.domain,
             "action_type": self.action_type,
-            "target": self.target,
+            "requested_effect": self.requested_effect,
+            "resource": self.resource,
+            "destination": self.destination,
             "repository": self.repository,
             "base_sha": self.base_sha,
             "patch_sha256": self.patch_sha256,
-            "actor_id": self.actor_id,
             "evidence": [asdict(item) for item in self.evidence],
         }
 
@@ -62,6 +93,7 @@ class AuthorityDecision:
     decision_id: str
     verdict: Verdict
     action_sha256: str
+    policy_version: str | None = None
     transformed_action: ActionEnvelope | None = None
     receipt_ref: str | None = None
 
@@ -78,25 +110,33 @@ class AuthorityDecision:
 @dataclass(frozen=True)
 class LearningEvent:
     event_id: str
+    run_id: str
     repository: str
+    base_sha: str
     failure_signature: str
     diagnosis: str
     remediation_summary: str
+    patch_sha256: str
     test_evidence: tuple[EvidenceRef, ...]
     security_evidence: tuple[EvidenceRef, ...]
     authority_decision_id: str
+    authority_receipt_ref: str | None
     success: bool
 
     def canonical_dict(self) -> dict[str, Any]:
         return {
             "event_id": self.event_id,
+            "run_id": self.run_id,
             "repository": self.repository,
+            "base_sha": self.base_sha,
             "failure_signature": self.failure_signature,
             "diagnosis": self.diagnosis,
             "remediation_summary": self.remediation_summary,
+            "patch_sha256": self.patch_sha256,
             "test_evidence": [asdict(item) for item in self.test_evidence],
             "security_evidence": [asdict(item) for item in self.security_evidence],
             "authority_decision_id": self.authority_decision_id,
+            "authority_receipt_ref": self.authority_receipt_ref,
             "success": self.success,
         }
 

@@ -8,8 +8,26 @@ def digest(char: str = "a") -> str:
     return char * 64
 
 
-def action(target: str = "refs/heads/fix") -> ActionEnvelope:
-    return ActionEnvelope("open_pr", target, "org/repo", "abc1234", digest("b"), "agent-1")
+def action(destination: str = "refs/heads/fix") -> ActionEnvelope:
+    return ActionEnvelope(
+        tenant_id="oasse-demo",
+        principal_id="rocketride-agent-1",
+        actor_type="agent",
+        session_id="session-1",
+        delegation_id=None,
+        source="rocketride",
+        adapter="aws-memory-muscle",
+        transaction_id="txn-1",
+        parent_action_id=None,
+        domain="software.change",
+        action_type="open_pr",
+        requested_effect="create_pull_request",
+        resource="org/repo",
+        destination=destination,
+        repository="org/repo",
+        base_sha="abc1234",
+        patch_sha256=digest("b"),
+    )
 
 
 def test_allow_executes_only_exact_bound_action() -> None:
