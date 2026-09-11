@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oasse.example/schemas/learning-event.schema.json",
+  "title": "LearningEvent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_id", "repository", "failure_signature", "diagnosis", "remediation_summary", "test_evidence", "security_evidence", "authority_decision_id", "success"],
+  "properties": {
+    "event_id": {"type": "string", "minLength": 1},
+    "repository": {"type": "string", "minLength": 1},
+    "failure_signature": {"type": "string", "minLength": 1},
+    "diagnosis": {"type": "string"},
+    "remediation_summary": {"type": "string"},
+    "test_evidence": {"type": "array", "items": {"$ref": "#/$defs/evidence"}},
+    "security_evidence": {"type": "array", "items": {"$ref": "#/$defs/evidence"}},
+    "authority_decision_id": {"type": "string", "minLength": 1},
+    "success": {"type": "boolean"}
+  },
+  "$defs": {
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "ref", "sha256"],
+      "properties": {
+        "source": {"type": "string", "minLength": 1},
+        "ref": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"}
+      }
+    }
+  }
+}
