@@ -3,7 +3,28 @@
   "team": "Oak & Sparrow Systems Enterprise",
   "challenge": "Intel Physical AI Challenge",
   "thesis": "Capability proposes. Authority decides. Execution follows authority, not capability.",
-  "demo": "Live perception -> VLA proposal -> Gatekeeper ALLOW/TRANSFORM/HOLD/DENY -> controlled SO-101 actuation -> sealed decision and outcome receipts",
-  "intel_stack": ["Intel Core Ultra", "OpenVINO", "Physical AI Studio", "Robotics AI Suite"],
-  "status": "hackathon skeleton"
+  "demo": "Rendered RGB -> native OpenVINO -> explicit scripted sorting proposal -> independent reference authority -> native MuJoCo idealized-suction transport -> new task postcondition -> chained receipts",
+  "intel_stack": [
+    "Intel Core Ultra (onsite target)",
+    "OpenVINO (native rehearsal)",
+    "Anomalib (export contract; trained model pending)",
+    "Physical AI Studio (onsite target)",
+    "Robotics AI Suite (onsite target)"
+  ],
+  "status": "submission rehearsal implementation; onsite integrations pending",
+  "verified_by": "Run scripts/rehearse_submission.py --profile native and retain its commit-bound evidence; do not infer acceptance from this metadata.",
+  "submission_fields": {
+    "demo_video_url": null,
+    "judge_repository_url": null,
+    "final_commit": null
+  },
+  "boundaries": {
+    "hardware_tested": false,
+    "trained_detector_verified": false,
+    "trained_vla_verified": false,
+    "production_gatekeeper_verified": false,
+    "grip": "idealized Cartesian suction weld, not SO-101"
+  },
+  "offline_demo": "inspection/index.html in the rehearsal evidence package",
+  "submission_sent": false
 }

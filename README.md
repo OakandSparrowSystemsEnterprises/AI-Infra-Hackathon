@@ -1,22 +1,17 @@
-# AI-Infra-Hackathon
+# Gatekeeper: Pre-Execution Security for Physical AI
 
-Oak & Sparrow Systems Enterprise LLC entry for the AI Infra Summit 2026 Intel Physical AI Challenge.
+Oak & Sparrow Systems Enterprise LLC's AI Infra Hackathon integration demonstrates independent authority between proposed action and physical effect. The runnable application remains in `oasse-ai-infra-hackathon/`. No directories have been relocated.
 
-camera/sensor evidence → perception → VLA proposed action → Gatekeeper authority evaluation → ALLOW / TRANSFORM / HOLD / DENY → controlled actuator → chained outcome receipt. Gatekeeper independently checks evidence, geometry, freshness, uncertainty, policy, and action state before physical effect. The MIT-licensed reference engine in this repository exercises a small declared subset of those checks: actor identity, evidence binding, freshness, workspace occupancy, confidence, action type, target bin, and speed.
+## Start here
 
-## Where the application lives
+The version 0.4 software rehearsal uses native OpenVINO inference over rendered RGB and native MuJoCo dynamics to inspect, transport and release a cube, then separately verify its destination. The detector and planner are reference implementations, and the grip is an idealized Cartesian suction constraint. This is not yet an SO-101 hardware or trained-model result.
 
-The application is in [`oasse-ai-infra-hackathon/`](oasse-ai-infra-hackathon/). Start with its [README](oasse-ai-infra-hackathon/README.md) for setup and the demo, and [`docs/`](oasse-ai-infra-hackathon/docs/) for architecture, judging, and on-site integration notes.
+Read the [application README](oasse-ai-infra-hackathon/README.md) for the reference API console. Use the [Phase 4 guide](oasse-ai-infra-hackathon/docs/PHASE4_INSPECTION.md) for the complete native rehearsal and offline evidence package. The [onsite runbook](oasse-ai-infra-hackathon/docs/ON_SITE_RUNBOOK.md) defines the real camera, Anomalib, VLA and controller handoff. The [live Gatekeeper probe](oasse-ai-infra-hackathon/docs/GATEKEEPER_LIVE_ACCEPTANCE.md) checks the deployed response contract without moving a robot. The [submission narrative](oasse-ai-infra-hackathon/docs/SUBMISSION_NARRATIVE.md) supplies the pitch and recorded-demo structure.
 
-```bash
-cd oasse-ai-infra-hackathon
-pip install -e ".[dev]"
-python -m pytest tests
-python scripts/run_demo.py
-```
+From the app directory, `python scripts/rehearse_submission.py --profile native --output /tmp/oasse-rehearsal` runs the test and demo evidence sequence after the optional native dependencies and rendering backend are installed. It never auto-installs drivers or commands hardware. Open the resulting `inspection/index.html` for the recorded demonstration. Verify its manifest and receipts with `scripts/verify_evidence.py`.
 
-## License
+## Licensing and IP boundary
 
-The code and materials in this repository are licensed under the MIT License. See [`LICENSE`](LICENSE).
+The MIT License applies to code and materials actually distributed here, including the local reference engine and API adapters. The separate proprietary Gatekeeper production implementation, policy corpus, private infrastructure, secrets and undistributed technology are not included. Nothing in the notice narrows MIT rights over repository files. See [LICENSE](LICENSE) and [NOTICE](oasse-ai-infra-hackathon/NOTICE.md).
 
-This repository is an MIT-licensed integration and demonstration implementation. It does not contain, and its license does not extend to, Oak & Sparrow Systems Enterprise LLC's separate proprietary technology: the Gatekeeper production/runtime source, the proprietary policy corpus, private enterprise integrations, private infrastructure, credentials, patents or patent applications, trade secrets, or any other OASSE technology not distributed here. Gatekeeper is consumed through the `AuthorityClient` / `GatekeeperClient` API boundary. The local reference authority engine included here is MIT-licensed repository code and is not the proprietary Gatekeeper production engine. See [`oasse-ai-infra-hackathon/NOTICE.md`](oasse-ai-infra-hackathon/NOTICE.md) for the full boundary statement.
+Passing the software rehearsal does not mark onsite hardware acceptance or online submission complete. `submission.json` and the generated readiness report keep those states separate.

@@ -1,0 +1,16 @@
+{
+  "record_type": "operator-attestation-not-certification",
+  "operator": null,
+  "verified_commit": null,
+  "hardware_operator_approval": false,
+  "camera_calibration": false,
+  "trained_detector": false,
+  "trained_vla": false,
+  "pre_send_interception": false,
+  "normal_sort": false,
+  "defective_sort": false,
+  "safe_interruption": false,
+  "video_recorded": false,
+  "judge_repository_access": false,
+  "evidence_notes": {}
+}

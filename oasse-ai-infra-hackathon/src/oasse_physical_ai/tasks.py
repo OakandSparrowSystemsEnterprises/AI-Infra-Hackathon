@@ -29,7 +29,7 @@ class InspectionTask:
         self.max_settled_speed_mps = number(max_settled_speed_mps, "max_settled_speed_mps", minimum=0)
         self._result: dict | None = None
         self._started = False
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
     def run(self, scenario: str = "allow") -> dict:
         with self._lock:

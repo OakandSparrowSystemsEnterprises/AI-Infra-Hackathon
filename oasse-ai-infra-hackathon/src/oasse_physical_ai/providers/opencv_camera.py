@@ -69,7 +69,8 @@ class OpenCVRGBSource:
             text(context.source, "context source")
             if context.source == "unspecified" or type(context.workspace_clear) is not bool:
                 raise ValueError("workspace context must be explicit")
-            if not 0 <= before-context.observed_at_ms <= self.max_context_age_ms:
+            context_now = int(time.time()*1000)
+            if not 0 <= context_now-context.observed_at_ms <= self.max_context_age_ms:
                 raise ValueError("workspace context is stale or future-dated")
             pose = None if context.object_pose_xyzrpy is None else tuple(vector(list(context.object_pose_xyzrpy), "object_pose_xyzrpy", 6))
             dimensions = None
