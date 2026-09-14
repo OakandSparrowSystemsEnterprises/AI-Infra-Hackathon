@@ -1,12 +1,15 @@
 # Architecture
 
+> For a principal-engineer review of trust boundaries, temporal semantics, failure behavior, data contracts, replay handling and residual risks, start with **[Senior Engineer Architecture Review](SENIOR_ENGINEER_ARCHITECTURE.md)**.
+
 The system is divided into a perception plane, planning plane, authority plane, execution plane, and evidence plane. Perception and planning may be probabilistic. The authority boundary is deterministic for a declared policy version. Execution is reachable only through an authorized action object. Evidence is sealed before the effect, and the physical outcome is chained afterward rather than retroactively changing the decision.
 
 ```text
+**INTEL PHYSICAL AI CAPABILITY PLANE**
 Camera / Sensors
       |
       v
-Perception / Anomalib / OpenVINO
+OpenVINO / Anomalib
       |  EvidenceFrame
       v
 VLA / Physical AI Studio
@@ -19,7 +22,7 @@ VLA / Physical AI Studio
 +----------------------------------+
       | AuthorizedAction only
       v
-Controlled Actuator / SO-101
+Robotics AI Suite / Controlled Actuator
       |
       v
 Outcome observation -> chained receipts

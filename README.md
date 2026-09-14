@@ -1,21 +1,35 @@
 # Gatekeeper: Pre-Execution Security for Physical AI
 
-**Intel Physical AI Challenge | AI Infra Summit Hackathon**
+## **INTEL® PHYSICAL AI CHALLENGE**
+
+### **INTEL® CORE™ ULTRA · OPENVINO™ · ANOMALIB · PHYSICAL AI STUDIO · ROBOTICS AI SUITE**
+
+Built for **AI INFRA SUMMIT 2026** with the **lablab.ai** and **Native** hackathon ecosystem.
 
 > **Capability proposes. Authority decides. Execution follows authority, not capability.**
 
-Oak & Sparrow Systems Enterprise LLC built a greenfield MIT-licensed authority layer for physical AI. Intel's Physical AI stack supplies the capability to perceive and act at machine speed. Gatekeeper adds an independent deterministic decision immediately before physical effect.
+Oak & Sparrow Systems Enterprise LLC built a greenfield MIT-licensed authority layer for Physical AI. **INTEL** supplies the capability surface that makes the challenge interesting: edge compute, accelerated inference and robotics tooling. Gatekeeper adds the independent machine-speed authority boundary immediately before physical effect.
 
 ```text
-camera / sensor
-  -> Intel / OpenVINO perception
-  -> EvidenceFrame
-  -> VLA / planner proposal
-  -> Gatekeeper authority
-  -> ALLOW | TRANSFORM | HOLD | DENY
-  -> controlled actuator
-  -> post-action verification
-  -> chained receipts
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                         INTEL PHYSICAL AI STACK                              │
+│  Core Ultra -> OpenVINO -> Anomalib -> Physical AI / VLA -> Robotics       │
+└──────────────────────────────────────┬───────────────────────────────────────┘
+                                       │ EvidenceFrame + ProposedAction
+                                       v
+                         ┌───────────────────────────┐
+                         │ GATEKEEPER AUTHORITY      │
+                         │ exact actor + evidence    │
+                         │ exact action + time       │
+                         │ ALLOW / TRANSFORM         │
+                         │ HOLD / DENY               │
+                         └─────────────┬─────────────┘
+                                       │ AuthorizedAction only
+                                       v
+┌──────────────────────────────────────┴───────────────────────────────────────┐
+│                    CONTROLLED PHYSICAL EXECUTION                            │
+│          robot command -> observed outcome -> chained receipts              │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 The deeper architecture treats authority as an **admissible transition space**, not merely a rule checked after planning:
@@ -24,8 +38,17 @@ The deeper architecture treats authority as an **admissible transition space**, 
 Observe -> Propose -> Project into the admissible state space -> Execute -> Prove
 ```
 
-## Start with the final draft
+with the compact invariant
 
+```math
+C_I:X_I\rightarrow X_I
+\qquad\text{and}\qquad
+I(C_I(x))=I(x)=\iota.
+```
+
+## Read this first
+
+- [Senior engineer architecture review](oasse-ai-infra-hackathon/docs/SENIOR_ENGINEER_ARCHITECTURE.md)
 - [Final project draft](oasse-ai-infra-hackathon/docs/FINAL_DRAFT.md)
 - [Authority invariant architecture](oasse-ai-infra-hackathon/docs/AUTHORITY_INVARIANT.md)
 - [Sponsor showcase strategy](oasse-ai-infra-hackathon/docs/SPONSOR_SHOWCASE.md)
@@ -34,19 +57,19 @@ Observe -> Propose -> Project into the admissible state space -> Execute -> Prov
 - [Tomorrow onsite runbook](oasse-ai-infra-hackathon/docs/TOMORROW_ONSITE.md)
 - [Application README](oasse-ai-infra-hackathon/README.md)
 
-## Sponsor-visible proof
+## **Sponsor-visible proof**
 
-Intel is the challenge sponsor, so Intel technology is made visible in the proof rather than buried in setup. The software rehearsal already verifies native compiled OpenVINO inference. Onsite, the demo is designed to show the actual OpenVINO runtime/device, the Anomalib anomaly evidence when the trained workflow is verified, and the role of Physical AI Studio / Robotics AI Suite when those event components are bound.
+**INTEL** is the challenge sponsor, so Intel technology is visible in the proof rather than buried in setup. The software rehearsal already verifies native compiled **OPENVINO** inference. Onsite, the demo is designed to show the actual OpenVINO runtime/device, **ANOMALIB** anomaly evidence when the trained workflow is verified, and the real role of **PHYSICAL AI STUDIO** and **ROBOTICS AI SUITE** when those event components are bound.
 
-Run `python scripts/sponsor_showcase.py --output onsite/sponsor-runtime.json` from the application directory to generate a non-actuating sponsor runtime record. It does not claim hardware or trained-model use merely because software is installed.
+Run `python scripts/sponsor_showcase.py --output onsite/sponsor-runtime.json` from the application directory to generate a non-actuating sponsor-runtime record. It records runtime facts without converting package presence into an unearned hardware or trained-model claim.
 
-AI Infra Summit, lablab.ai and Native are credited as the event/hackathon ecosystem separately from the technical sponsor proof.
+**AI INFRA SUMMIT**, **lablab.ai** and **Native** are credited prominently as the event/hackathon ecosystem. Event-level Diamond Partners are recognized in the sponsor document without implying that every event sponsor is part of this project's technical dependency graph.
 
 ## Current proof
 
-The reproducible software rehearsal currently demonstrates native OpenVINO inference, native MuJoCo dynamics, normal/defective routing, transformed motion, stale/replayed evidence holds, authority-outage fail-closed behavior, post-action verification and chained receipts.
+The reproducible software rehearsal demonstrates native OpenVINO inference, native MuJoCo dynamics, normal/defective routing, transformed motion, stale/replayed evidence holds, authority-outage fail-closed behavior, post-action verification and chained receipts.
 
-A detected defect does not automatically equal an authority violation. Perception supplies facts; authority determines whether the proposed transition remains admissible. Likewise, the authority invariant constrains what may execute but does not claim to choose the uniquely optimal action.
+A detected defect does not automatically equal an authority violation. **Perception supplies facts; authority determines admissibility.** Likewise, the authority invariant constrains what may execute but does not claim to choose the uniquely optimal action.
 
 The software rehearsal intentionally labels its detector, planner and grip as reference components. Onsite hardware, trained Anomalib/VLA use and production Gatekeeper are upgraded from *pending* only after evidence from the actual run exists.
 
