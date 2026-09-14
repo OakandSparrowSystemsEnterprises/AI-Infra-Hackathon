@@ -23,3 +23,33 @@ jobs:
         run: python -m pytest tests -q
       - name: Demo smoke test
         run: python scripts/run_demo.py
+      - name: Docker build
+        run: docker build -t oasse-physical-ai-smoke .
+      - name: HTTP service smoke test
+        run: |
+          set -euo pipefail
+          docker run -d --name oasse-smoke -p 8000:8000 oasse-physical-ai-smoke
+          trap 'docker logs oasse-smoke || true; docker rm -f oasse-smoke >/dev/null 2>&1 || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/health > /tmp/health.json; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8000/health > /tmp/health.json
+          curl -fsS -X POST http://127.0.0.1:8000/v1/demo/allow > /tmp/demo.json
+          python - <<'PY'
+          import json
+
+          with open('/tmp/health.json', encoding='utf-8') as f:
+              health = json.load(f)
+          assert health['status'] == 'ok', health
+          assert health['authority_mode'] == 'reference', health
+          assert health['receipt_chain_valid'] is True, health
+
+          with open('/tmp/demo.json', encoding='utf-8') as f:
+              demo = json.load(f)
+          assert demo['decision']['verdict'] == 'ALLOW', demo
+          assert demo['executed'] is True, demo
+          assert demo['outcome_receipt'] is not None, demo
+          PY
