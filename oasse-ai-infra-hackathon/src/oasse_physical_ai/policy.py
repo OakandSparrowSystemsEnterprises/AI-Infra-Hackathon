@@ -44,7 +44,10 @@ class ReferenceAuthorityEngine:
             verdict = Verdict.DENY
             reasons.append("EVIDENCE_BINDING_MISMATCH")
 
-        age = max(0, now_ms - evidence.captured_at_ms)
+        age = now_ms - evidence.captured_at_ms
+        if verdict != Verdict.DENY and age < 0:
+            verdict = Verdict.HOLD
+            reasons.append("EVIDENCE_IN_FUTURE")
         if verdict != Verdict.DENY and age > self.evidence_max_age_ms:
             verdict = Verdict.HOLD
             reasons.append("EVIDENCE_STALE")

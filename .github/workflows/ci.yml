@@ -4,9 +4,13 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: oasse-ai-infra-hackathon
@@ -28,28 +32,63 @@ jobs:
       - name: HTTP service smoke test
         run: |
           set -euo pipefail
-          docker run -d --name oasse-smoke -p 8000:8000 oasse-physical-ai-smoke
+          docker run -d --name oasse-smoke -p 127.0.0.1:8000:8000 oasse-physical-ai-smoke
           trap 'docker logs oasse-smoke || true; docker rm -f oasse-smoke >/dev/null 2>&1 || true' EXIT
-          for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8000/health > /tmp/health.json; then
-              break
-            fi
-            sleep 1
-          done
-          curl -fsS http://127.0.0.1:8000/health > /tmp/health.json
-          curl -fsS -X POST http://127.0.0.1:8000/v1/demo/allow > /tmp/demo.json
           python - <<'PY'
-          import json
-
-          with open('/tmp/health.json', encoding='utf-8') as f:
-              health = json.load(f)
-          assert health['status'] == 'ok', health
-          assert health['authority_mode'] == 'reference', health
-          assert health['receipt_chain_valid'] is True, health
-
-          with open('/tmp/demo.json', encoding='utf-8') as f:
-              demo = json.load(f)
-          assert demo['decision']['verdict'] == 'ALLOW', demo
-          assert demo['executed'] is True, demo
-          assert demo['outcome_receipt'] is not None, demo
+          import json, time, urllib.request
+          base = 'http://127.0.0.1:8000'
+          def request(path, method='GET'):
+              req = urllib.request.Request(base + path, method=method)
+              with urllib.request.urlopen(req, timeout=5) as response:
+                  return json.load(response)
+          for attempt in range(30):
+              try:
+                  health = request('/health')
+                  break
+              except OSError:
+                  if attempt == 29:
+                      raise
+                  time.sleep(1)
+          assert health['status'] == 'ok'
+          assert health['authority_mode'] == 'reference'
+          for name, verdict, executed in [('allow','ALLOW',True), ('stale','HOLD',False), ('occupied','DENY',False), ('overspeed','TRANSFORM',True)]:
+              result = request('/v1/demo/' + name, 'POST')
+              assert result['decision']['verdict'] == verdict, result
+              assert result['executed'] is executed, result
+              assert result['dispatch_attempted'] is executed, result
+          assert request('/v1/receipts')['valid'] is True
+          assert request('/v1/metrics')['runs'] == 4
+          print('Docker HTTP smoke passed: ALLOW, HOLD, DENY, TRANSFORM, receipts, metrics')
           PY
+  simulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: oasse-ai-infra-hackathon
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: oasse-ai-infra-hackathon/pyproject.toml
+      - name: Install native simulation dependencies
+        run: python -m pip install -e ".[dev,simulator]"
+      - name: Require actual MuJoCo import
+        run: python -c "import mujoco; print('Native MuJoCo', mujoco.__version__)"
+      - name: Complete suite with native dynamics
+        run: python -m pytest tests -q
+      - name: Native simulator smoke test
+        run: python scripts/run_mujoco_demo.py --output "$RUNNER_TEMP/mujoco-smoke.json"
+      - name: Record dependency versions
+        run: python -m pip freeze > "$RUNNER_TEMP/simulator-dependencies.txt"
+      - name: Save native verification record
+        uses: actions/upload-artifact@v4
+        with:
+          name: mujoco-verification
+          path: |
+            ${{ runner.temp }}/mujoco-smoke.json
+            ${{ runner.temp }}/simulator-dependencies.txt
+          if-no-files-found: error
+          retention-days: 14

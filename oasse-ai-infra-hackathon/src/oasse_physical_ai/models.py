@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field, asdict
 from enum import Enum
 from typing import Any, Dict, List, Optional
-import math
 import time
+import math
 import uuid
 
 
@@ -30,6 +30,7 @@ class EvidenceFrame:
     object_dimensions_xyz: Optional[List[float]] = None
     frame_sequence: Optional[int] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+    scene_hash: Optional[str] = None
 
     @staticmethod
     def fresh(**kwargs: Any) -> "EvidenceFrame":
@@ -74,7 +75,7 @@ SPEED_REL_TOL = 1e-9
 
 
 def physically_changed(candidate: "ProposedAction", original: "ProposedAction") -> bool:
-    """True when the two actions differ in any physical field."""
+    """Ignore cosmetic fields and floating-point noise when checking TRANSFORM."""
     for name in PHYSICAL_ACTION_FIELDS:
         a, b = getattr(candidate, name), getattr(original, name)
         if name == "speed_mps":
@@ -125,12 +126,14 @@ class DispatchResult:
     actuator_result: Dict[str, Any]
     outcome_receipt: Optional[Receipt]
     total_latency_ms: float
+    dispatch_attempted: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "decision": self.decision.to_dict(),
             "decision_receipt": self.decision_receipt.to_dict(),
             "executed": self.executed,
+            "dispatch_attempted": self.dispatch_attempted,
             "actuator_result": self.actuator_result,
             "outcome_receipt": self.outcome_receipt.to_dict() if self.outcome_receipt else None,
             "total_latency_ms": self.total_latency_ms,
