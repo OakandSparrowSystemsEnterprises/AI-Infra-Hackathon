@@ -23,7 +23,7 @@ The answer after this pass is: not through the tested software path without viol
 
 ### Connection pooling
 
-`GatekeeperClient` now owns one long-lived `httpx.Client`. Live authority calls reuse TCP/TLS connections instead of constructing a client for every decision. This removes a large avoidable source of real deployment latency while keeping the same fail-closed response semantics. The API closes the pool at application shutdown and the live probe closes it explicitly.
+`GatekeeperClient` lazily creates one pooled `httpx.Client` on the first authority call and reuses it thereafter. That preserves fail-closed handling of client-construction failures while avoiding repeated TCP/TLS setup on the live decision path. The API closes the pool at application shutdown and the live probe closes it explicitly.
 
 ### Snapshot isolation instead of repeated cryptographic fingerprints
 
@@ -33,9 +33,9 @@ Cryptographic hashing remains where it belongs: evidence identity, receipts and 
 
 ### Constant-time receipt gate
 
-The previous implementation fully re-walked the growing receipt chain before effects. Public receipts are now detached from private immutable stored records, so a consumer cannot corrupt chain state through a returned payload. The hot-path integrity gate validates the immutable tail in O(1); full O(n) verification remains available at `/health`, receipt export and evidence verification.
+The previous implementation fully re-walked the growing receipt chain before effects. Public receipts are now detached from private immutable stored records, so a consumer cannot corrupt chain state through a returned payload. The hot-path integrity gate validates the immutable tail and adjacent link in O(1); full O(n) verification remains available at `/health`, receipt export and evidence verification.
 
-Receipt identity is now included in the hashed envelope, so the receipt ID itself cannot be rewritten without invalidating the record.
+Receipt identity is included in the hashed envelope, so the receipt ID itself cannot be rewritten without invalidating the record.
 
 ### Single-sample dispatch validation
 
@@ -43,29 +43,20 @@ Replay/scene/freshness checking previously sampled freshness twice in a single g
 
 ### Stricter live contract
 
-Live authority response timestamps must be exact non-negative integers, reason codes must be non-empty strings, and transformed trajectories must be bounded XYZ paths. These are schema failures, not values silently coerced into an executable command.
+Live authority requests and responses are size bounded. Response timestamps must be exact non-negative 64-bit integers, reason-code collections and control strings are bounded, and transformed trajectories must be bounded XYZ paths. These are schema failures, not values silently coerced into an executable command.
 
 ## Latency discipline
 
-CI now runs `scripts/benchmark_hot_path.py` on the reference path. It separately measures the deterministic reference authority evaluation and the complete synthetic governed dispatch path while the receipt chain grows. The CI budgets are deliberately regression guards, not product benchmark claims:
+CI runs `scripts/benchmark_hot_path.py` on the reference path. It separately measures deterministic reference authority evaluation and complete synthetic governed dispatch while the receipt chain grows. The budgets are regression guards, not product benchmark claims:
 
-- reference authority p95 must remain below **0.25 ms** on the GitHub runner;
-- synthetic governed pipeline p95 must remain below **3.0 ms** on the GitHub runner.
+- reference authority p95 below **0.25 ms** on the GitHub runner;
+- synthetic governed pipeline p95 below **3.0 ms** on the GitHub runner.
 
-The script explicitly excludes network transit, OpenVINO inference and physical robot time. Onsite measurements must report those components separately.
+The benchmark excludes network transit, OpenVINO inference and physical robot time. Onsite measurements must report those components separately.
 
 ## What remains outside the proof
 
-A rigorous review should still reject any claim that this repository alone proves:
-
-- camera/source authenticity;
-- durable replay protection across process restart;
-- OS-level isolation from malicious code with direct actuator access;
-- physical braking or emergency-stop guarantees;
-- collision avoidance beyond the declared integration checks;
-- production Gatekeeper service identity without deployment attestation;
-- trained Anomalib/VLA behavior until the onsite trace exists;
-- real robot timing, safety or cycle-time performance before hardware runs.
+A rigorous review should still reject any claim that this repository alone proves camera/source authenticity, durable replay protection across restart, OS-level isolation from malicious code with direct actuator access, physical braking or emergency-stop guarantees, collision avoidance beyond declared checks, production Gatekeeper identity without deployment attestation, trained Anomalib/VLA behavior before onsite traces, or real robot timing and safety performance.
 
 Those are explicit integration or lower-layer responsibilities, not hidden assumptions.
 

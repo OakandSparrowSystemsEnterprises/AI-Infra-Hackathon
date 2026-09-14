@@ -5,6 +5,7 @@ import json
 import logging
 import math
 import os
+import threading
 import time
 from typing import Any, Dict, List, Optional, Protocol, Tuple
 
@@ -32,6 +33,10 @@ AUTHORIZED_ACTION_CONFLICT = "AUTHORIZED_ACTION_CONFLICT"
 
 LIVE_POLICY_VERSION_DEFAULT = "gatekeeper-live"
 LIVE_UNAVAILABLE_POLICY_VERSION = "gatekeeper-live-unavailable"
+MAX_AUTHORITY_REQUEST_BYTES = 1024 * 1024
+MAX_AUTHORITY_RESPONSE_BYTES = 1024 * 1024
+MAX_REASON_CODES = 64
+MAX_CONTROL_TEXT = 256
 
 _BOUND_FIELDS = ("action_id", "actor_id", "evidence_id")
 _ACCEPTED_FIELDS = frozenset(PHYSICAL_ACTION_FIELDS) | frozenset(_BOUND_FIELDS)
@@ -47,13 +52,14 @@ def _is_number(value: Any) -> bool:
         return False
 
 
-def _is_text(value: Any) -> bool:
-    return isinstance(value, str) and value.strip() != ""
+def _is_text(value: Any, *, maximum: int | None = None) -> bool:
+    return (isinstance(value, str) and value.strip() != ""
+            and (maximum is None or len(value) <= maximum))
 
 
 def _valid_override(name: str, value: Any) -> bool:
     if name in ("action_id", "actor_id", "evidence_id", "action_type", "target_bin", "object_id"):
-        return _is_text(value)
+        return _is_text(value, maximum=MAX_CONTROL_TEXT)
     if name == "speed_mps":
         return _is_number(value) and value >= 0
     if name == "trajectory":
@@ -88,28 +94,29 @@ def _parse_response(data: Any) -> Dict[str, Any]:
         raise ValueError("verdict must be a string")
     verdict = Verdict(verdict_raw)
     decision_id = data.get("decision_id")
-    if not _is_text(decision_id):
-        raise ValueError("decision_id must be a non-empty string")
+    if not _is_text(decision_id, maximum=MAX_CONTROL_TEXT):
+        raise ValueError("decision_id must be a bounded non-empty string")
     reasons = data.get("reason_codes")
     if reasons is None:
         reasons = []
-    if not isinstance(reasons, list) or not all(_is_text(code) for code in reasons):
-        raise ValueError("reason_codes must be a list of non-empty strings")
+    if (not isinstance(reasons, list) or len(reasons) > MAX_REASON_CODES
+            or not all(_is_text(code, maximum=MAX_CONTROL_TEXT) for code in reasons)):
+        raise ValueError("reason_codes must be a bounded list of non-empty strings")
     evaluated_at = data.get("evaluated_at_ms")
     if evaluated_at is None:
         evaluated_at = int(time.time() * 1000)
-    if type(evaluated_at) is not int or evaluated_at < 0:
-        raise ValueError("evaluated_at_ms must be a non-negative integer")
+    if type(evaluated_at) is not int or not 0 <= evaluated_at <= 2**63 - 1:
+        raise ValueError("evaluated_at_ms must be a non-negative 64-bit integer")
     latency = data.get("authority_latency_ms")
     if latency is None:
         latency = 0.0
     if not _is_number(latency) or latency < 0:
-        raise ValueError("authority_latency_ms must be a non-negative number")
+        raise ValueError("authority_latency_ms must be a non-negative finite number")
     policy_version = data.get("policy_version")
     if policy_version is None:
         policy_version = LIVE_POLICY_VERSION_DEFAULT
-    if not _is_text(policy_version):
-        raise ValueError("policy_version must be a non-empty string")
+    if not _is_text(policy_version, maximum=MAX_CONTROL_TEXT):
+        raise ValueError("policy_version must be a bounded non-empty string")
     return {
         "verdict": verdict,
         "decision_id": decision_id,
@@ -124,10 +131,10 @@ def _parse_response(data: Any) -> Dict[str, Any]:
 class GatekeeperClient:
     """Pooled, fail-closed HTTP adapter for the Gatekeeper authority endpoint.
 
-    The adapter keeps one ``httpx.Client`` for the lifetime of the authority
-    client so live evaluations reuse TCP/TLS connections instead of paying a
-    fresh connection setup on every robot decision. ``close()`` is explicit
-    and idempotent. The production service remains outside this MIT repository.
+    The HTTP client is created lazily on the first evaluation and then reused,
+    avoiding repeated TCP/TLS setup on the live decision path. Client creation
+    itself remains inside the fail-closed evaluation boundary: missing proxy or
+    transport dependencies therefore become HOLD rather than an uncaught error.
     """
 
     def __init__(self, base_url: str, token: str = "", timeout_s: float = 2.0,
@@ -142,19 +149,33 @@ class GatekeeperClient:
         self.token = token
         self.timeout_s = float(timeout_s)
         self._transport = transport
-        headers = {"Content-Type": "application/json"}
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
-        self._client = httpx.Client(
-            timeout=self.timeout_s,
-            transport=transport,
-            headers=headers,
-            limits=httpx.Limits(max_connections=8, max_keepalive_connections=4, keepalive_expiry=30.0),
-        )
+        self._client: httpx.Client | None = None
+        self._closed = False
+        self._client_lock = threading.RLock()
+
+    def _get_client(self) -> httpx.Client:
+        with self._client_lock:
+            if self._closed:
+                raise RuntimeError("Gatekeeper client is closed")
+            if self._client is None:
+                headers = {"Content-Type": "application/json"}
+                if self.token:
+                    headers["Authorization"] = f"Bearer {self.token}"
+                self._client = httpx.Client(
+                    timeout=self.timeout_s,
+                    transport=self._transport,
+                    headers=headers,
+                    limits=httpx.Limits(max_connections=8, max_keepalive_connections=4,
+                                        keepalive_expiry=30.0),
+                )
+            return self._client
 
     def close(self) -> None:
-        if not self._client.is_closed:
-            self._client.close()
+        with self._client_lock:
+            self._closed = True
+            client, self._client = self._client, None
+        if client is not None and not client.is_closed:
+            client.close()
 
     def __enter__(self) -> "GatekeeperClient":
         return self
@@ -169,20 +190,25 @@ class GatekeeperClient:
                 {"evidence": snapshot_fields(evidence), "action": snapshot_fields(action)},
                 separators=(",", ":"), allow_nan=False,
             ).encode("utf-8")
+            if len(body) > MAX_AUTHORITY_REQUEST_BYTES:
+                raise ValueError("authority request exceeds size budget")
         except Exception as exc:
             log.warning("Gatekeeper request for action %s could not be serialized (%s); holding",
                         action.action_id, type(exc).__name__)
             return self._hold(evidence, action, [AUTHORITY_REQUEST_INVALID], start)
 
         try:
-            response = self._client.post(f"{self.base_url}/v1/evaluate", content=body)
+            response = self._get_client().post(f"{self.base_url}/v1/evaluate", content=body)
             response.raise_for_status()
+            if len(response.content) > MAX_AUTHORITY_RESPONSE_BYTES:
+                raise ValueError("authority response exceeds size budget")
         except httpx.HTTPStatusError as exc:
             status = exc.response.status_code
             log.warning("Gatekeeper returned HTTP %s for action %s; holding", status, action.action_id)
             return self._hold(evidence, action, [AUTHORITY_UNAVAILABLE, f"HTTP_{status}"], start)
         except Exception as exc:
-            log.warning("Gatekeeper unreachable (%s) for action %s; holding", type(exc).__name__, action.action_id)
+            log.warning("Gatekeeper unreachable or unusable (%s) for action %s; holding",
+                        type(exc).__name__, action.action_id)
             return self._hold(evidence, action, [AUTHORITY_UNAVAILABLE], start)
 
         try:

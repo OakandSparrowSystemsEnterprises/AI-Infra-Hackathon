@@ -178,20 +178,24 @@ def verify_bundle(directory: Path, *, expected_manifest_sha256: str | None = Non
     if manifest.get("schema")!="oasse.evidence-bundle.v1": raise ValueError("unsupported manifest")
     expected=manifest["files"]
     actual={p.relative_to(directory).as_posix() for p in directory.rglob("*") if p.is_file() or p.is_symlink()}
-    if actual != set(expected)|{"manifest.json"}: raise ValueError("bundle has missing or unexpected files")
-    for name,meta in expected.items():
-        path=directory/str(_member(name))
-        if path.is_symlink() or not path.is_file(): raise ValueError("bundle member must be a regular file")
-        data=path.read_bytes()
-        if len(data)!=meta["size"] or hashlib.sha256(data).hexdigest()!=meta["sha256"]:
-            raise ValueError("bundle member hash mismatch")
-    verify_record(json.loads((directory/"record.json").read_text()))
-    return {"verified":True,"manifest_sha256":digest,"source_commit":manifest.get("source_commit")}
+    if actual!=set(expected)|{"manifest.json"}: raise ValueError("unmanifested or missing files")
+    total=0
+    for name, item in expected.items():
+        rel=_member(name); path=directory/str(rel)
+        if any((directory/Path(*rel.parts[:i])).is_symlink() for i in range(1,len(rel.parts)+1)):
+            raise ValueError("symlinks are not bundle artifacts")
+        size=path.stat().st_size; total+=size
+        if size>20*1024*1024 or total>100*1024*1024: raise ValueError("bundle too large")
+        if size!=item["size"] or hashlib.sha256(path.read_bytes()).hexdigest()!=item["sha256"]:
+            raise ValueError("artifact hash mismatch")
+    record=json.loads((directory/"record.json").read_text())
+    if record.get("source_commit") != manifest.get("source_commit"): raise ValueError("source binding mismatch")
+    verify_record(record)
+    return {"verified":True,"manifest_sha256":digest,"files":len(expected),"cases":len(record["cases"])}
 
 
 def zip_bundle(directory: Path, destination: Path) -> None:
     verify_bundle(directory)
-    destination = Path(destination)
-    with zipfile.ZipFile(destination,"w",compression=zipfile.ZIP_DEFLATED) as archive:
+    with zipfile.ZipFile(destination,"x",compression=zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(Path(directory).rglob("*")):
             if path.is_file(): archive.write(path,path.relative_to(directory).as_posix())
