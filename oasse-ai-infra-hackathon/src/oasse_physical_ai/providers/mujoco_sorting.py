@@ -121,6 +121,7 @@ class MuJoCoSortingRuntime:
             return {"status": status, "reason": reason, "action_id": action.action_id,
                     "backend": "mujoco", "model": "cartesian-idealized-suction",
                     "speed_mps": action.speed_mps, "simulation_steps": self.step_count-before_steps,
+                    "controller_speed_factor": .85,
                     "before_object_xyz": before, "after_object_xyz": self.object_position,
                     "peak_command_speed_mps": peak_command, "peak_measured_speed_mps": peak_measured,
                     "grip_active": bool(self.data.eq_active[self.eq]), "events": list(events),
@@ -157,6 +158,8 @@ class MuJoCoSortingRuntime:
             if not self.np.isfinite(self.data.qpos).all() or not self.np.isfinite(self.data.qvel).all():
                 raise ValueError("nonfinite physics state")
             peak_measured = max(peak_measured, float(self.np.linalg.norm(self.data.qvel[:3])))
+            if peak_measured > speed + 1e-9:
+                return "MEASURED_SPEED_EXCEEDED"
             return None
 
         def interrupt(reason):
@@ -171,7 +174,7 @@ class MuJoCoSortingRuntime:
                     distance = float(self.np.linalg.norm(delta))
                     if distance <= .0005:
                         break
-                    velocity = delta/distance * min(speed, distance/float(self.model.opt.timestep))
+                    velocity = delta/distance * min(.85*speed, distance/float(self.model.opt.timestep))
                     reason = step(velocity)
                     if reason: return interrupt(reason)
                 for _ in range(8):
@@ -200,5 +203,6 @@ class MuJoCoSortingRuntime:
             result["error_type"] = type(exc).__name__
             return result
         finally:
+            # No extra physics step is taken after permission has expired.
             self.data.ctrl[:] = 0.
             self.data.qfrc_applied[:] = 0.
