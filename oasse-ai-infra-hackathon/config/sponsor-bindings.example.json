@@ -1,0 +1,47 @@
+{
+  "schema": "oasse.sponsor-bindings.v1",
+  "sponsor": "Intel",
+  "track": "Intel Physical AI Challenge",
+  "packages": [
+    "openvino",
+    "anomalib",
+    "lerobot"
+  ],
+  "required_before_motion": [
+    "camera",
+    "planner",
+    "actuator"
+  ],
+  "slots": {
+    "camera": {
+      "mode": "python",
+      "entrypoint": "onsite_bridge:capture_rgb",
+      "notes": "Return RGBFrame or the strict SponsorRGBSource mapping."
+    },
+    "context": {
+      "mode": "python",
+      "entrypoint": "onsite_bridge:read_context",
+      "notes": "Optional separate source for workspace/geometry facts if the camera callback does not include them."
+    },
+    "inference": {
+      "mode": "builtin",
+      "component": "NativeOpenVINOPerception + AnomalibDecoder",
+      "notes": "Use event-provided OpenVINO/Anomalib artifacts without changing the authority core."
+    },
+    "planner": {
+      "mode": "python",
+      "entrypoint": "onsite_bridge:plan",
+      "notes": "Return explicit action_type, object_id, target_bin, speed_mps and trajectory."
+    },
+    "actuator": {
+      "mode": "python",
+      "entrypoint": "onsite_bridge:execute",
+      "notes": "Return explicit status and the exact action_id. No implicit success."
+    },
+    "stop": {
+      "mode": "hardware",
+      "component": "event-provided controller stop / E-stop",
+      "notes": "Document the actual stop mechanism onsite before safe-interruption proof."
+    }
+  }
+}

@@ -53,6 +53,8 @@ I(C_I(x))=I(x)=\iota.
 - [Final project draft](oasse-ai-infra-hackathon/docs/FINAL_DRAFT.md)
 - [Authority invariant architecture](oasse-ai-infra-hackathon/docs/AUTHORITY_INVARIANT.md)
 - [Sponsor showcase strategy](oasse-ai-infra-hackathon/docs/SPONSOR_SHOWCASE.md)
+- [Onsite sponsor binding kit](oasse-ai-infra-hackathon/docs/ONSITE_SPONSOR_BINDING.md)
+- [Focused onsite entry plan](oasse-ai-infra-hackathon/docs/ONSITE_ENTRY_PLAN.md)
 - [Judge one-pager](oasse-ai-infra-hackathon/docs/JUDGE_ONE_PAGER.md)
 - [Final demo script](oasse-ai-infra-hackathon/docs/DEMO_SCRIPT_FINAL.md)
 - [Tomorrow onsite runbook](oasse-ai-infra-hackathon/docs/TOMORROW_ONSITE.md)
