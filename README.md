@@ -18,9 +18,16 @@ camera / sensor
   -> chained receipts
 ```
 
+The deeper architecture treats authority as an **admissible transition space**, not merely a rule checked after planning:
+
+```text
+Observe -> Propose -> Project into the admissible state space -> Execute -> Prove
+```
+
 ## Start with the final draft
 
 - [Final project draft](oasse-ai-infra-hackathon/docs/FINAL_DRAFT.md)
+- [Authority invariant architecture](oasse-ai-infra-hackathon/docs/AUTHORITY_INVARIANT.md)
 - [Sponsor showcase strategy](oasse-ai-infra-hackathon/docs/SPONSOR_SHOWCASE.md)
 - [Judge one-pager](oasse-ai-infra-hackathon/docs/JUDGE_ONE_PAGER.md)
 - [Final demo script](oasse-ai-infra-hackathon/docs/DEMO_SCRIPT_FINAL.md)
@@ -38,6 +45,8 @@ AI Infra Summit, lablab.ai and Native are credited as the event/hackathon ecosys
 ## Current proof
 
 The reproducible software rehearsal currently demonstrates native OpenVINO inference, native MuJoCo dynamics, normal/defective routing, transformed motion, stale/replayed evidence holds, authority-outage fail-closed behavior, post-action verification and chained receipts.
+
+A detected defect does not automatically equal an authority violation. Perception supplies facts; authority determines whether the proposed transition remains admissible. Likewise, the authority invariant constrains what may execute but does not claim to choose the uniquely optimal action.
 
 The software rehearsal intentionally labels its detector, planner and grip as reference components. Onsite hardware, trained Anomalib/VLA use and production Gatekeeper are upgraded from *pending* only after evidence from the actual run exists.
 

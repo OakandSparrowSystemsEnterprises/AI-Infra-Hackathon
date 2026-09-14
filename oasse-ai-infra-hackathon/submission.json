@@ -8,12 +8,20 @@
   "problem": "Physical-AI systems can compress perception, planning and action into a machine-speed loop without an independent answer to whether this exact actor, evidence and action are authorized now.",
   "solution": "Insert an independent deterministic pre-execution authority boundary between proposed action and physical effect, then bind the observed result back to the authorization record.",
   "novelty": "The model and robot retain capability but do not possess execution authority. Gatekeeper independently returns ALLOW, TRANSFORM, HOLD or DENY for the exact evidence/action pair before dispatch.",
+  "mathematical_architecture": {
+    "conceptual_only": true,
+    "core_invariant": "I(x_(n+1)) = I(x_n) = iota",
+    "admissible_space": "X_I = {x in X : I(x) = iota}",
+    "controlled_transition": "C_I : X_I -> X_I",
+    "pipeline": "Observe -> Propose -> Project into the admissible state space -> Execute -> Prove",
+    "discipline": "The invariant constrains admissible transitions; it does not uniquely choose the optimal next action or claim GOI validation."
+  },
   "sponsor_story": "Intel supplies the physical-AI capability surface: edge execution, inference and robotics tooling. Gatekeeper supplies the independent authority surface. The demo makes Intel's contribution visible through runtime/device evidence, inference output and the physical-AI execution path rather than only listing sponsor technologies.",
   "architecture": [
     "camera/sensor evidence",
     "Intel/OpenVINO perception -> EvidenceFrame",
     "VLA/planner -> ProposedAction",
-    "Gatekeeper authority evaluation",
+    "Gatekeeper authority evaluation / admissibility projection",
     "ALLOW | TRANSFORM | HOLD | DENY",
     "controlled physical-AI actuator path",
     "post-action observation",
@@ -26,7 +34,7 @@
     "authority unavailable -> HOLD -> no actuator call",
     "replayed evidence -> HOLD",
     "normal object -> accept destination",
-    "defective object -> reject destination"
+    "defective object evidence -> reject proposal may remain admissible and receive ALLOW"
   ],
   "intel_stack": [
     "Intel Core Ultra (onsite target)",

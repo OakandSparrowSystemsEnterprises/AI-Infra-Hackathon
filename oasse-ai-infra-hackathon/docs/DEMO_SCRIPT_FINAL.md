@@ -2,11 +2,15 @@
 
 Target length: 2 to 3 minutes. Keep the hardware result and software fallback clearly separated.
 
-## 0:00-0:20 — Open with the sponsor story
+## 0:00-0:20 — Open with the sponsor and authority story
 
-> We're building on Intel's Physical AI stack because the interesting governance problem appears when perception and robotics get fast enough to close the loop. Intel gives the system machine-speed capability. Gatekeeper adds the independent boundary that decides whether that exact capability is authorized to become physical action now.
+> We're building on Intel's Physical AI stack because the governance problem appears when perception and robotics get fast enough to close the loop. Intel gives the system machine-speed capability. Gatekeeper adds the independent boundary that decides whether that exact capability is authorized to become physical action now. We are not checking a rule after the fact; we are constraining which state transitions are executable at all.
 
-Show the architecture path, OpenVINO/runtime evidence and effective authority mode.
+Show the architecture path, OpenVINO/runtime evidence and effective authority mode. If using the technical slide, point to the five-stage summary:
+
+```text
+Observe -> Propose -> Project into the admissible state space -> Execute -> Prove
+```
 
 ## 0:20-0:50 — Intel inference, normal object
 
@@ -16,15 +20,17 @@ Show the live frame and normalized evidence. Name the actual Intel component vis
 
 Run the action. Show ALLOW, dispatch and the post-action verification.
 
-> Intel handles the physical-AI capability. We record the authority decision before execution, then independently record the observed result afterward.
+> Intel handles the physical-AI capability. Gatekeeper establishes that this transition remains admissible. We record that decision before execution, then independently record the observed result afterward.
 
 ## 0:50-1:15 — Anomaly evidence, defective object
 
 Place/show the visibly defective object. If the trained Anomalib workflow is live, show its score and localization on screen and name it explicitly.
 
-> Now the Intel perception evidence changes. The anomaly result identifies the defect, and the planner proposes the reject path. The same independent authority boundary evaluates that new proposal against that new evidence.
+> Now the perception evidence changes. The anomaly result is a fact, not automatically a violation. The planner proposes the reject path, and the same authority boundary asks whether that transition remains admissible under the current evidence.
 
 Run the action. Show reject placement and post-action evidence.
+
+> Perception supplies facts. Authority determines admissibility.
 
 If the trained Anomalib workflow is not yet verified, say so and use the reference-detector trace rather than claiming it.
 
@@ -32,7 +38,7 @@ If the trained Anomalib workflow is not yet verified, say so and use the referen
 
 Present an overspeed proposal.
 
-> The physical-AI stack is capable of issuing this proposal, but capability is not authority. This command is outside the permitted movement envelope. Gatekeeper returns TRANSFORM with the exact constrained action that may enter the robotics execution path.
+> The physical-AI stack is capable of issuing this proposal, but capability is not authority. This command is outside the permitted movement envelope. Gatekeeper projects it into the admissible action space and returns TRANSFORM with the exact constrained action that may enter the robotics execution path.
 
 Show proposed speed, authorized speed and measured execution speed. Emphasize that the original overspeed action never reaches the actuator.
 
@@ -40,7 +46,7 @@ Show proposed speed, authorized speed and measured execution speed. Emphasize th
 
 Use stale evidence or an intentionally expired frame.
 
-> This is the important failure case. OpenVINO still works. The planner still works. The robot still works. The only thing that changed is whether this evidence is current enough to justify physical action.
+> This is the important failure case. OpenVINO still works. The planner still works. The robot still works. The proposal can still be well formed. The only thing that changed is whether this evidence is current enough for that state transition to remain admissible.
 
 Show HOLD and zero new movement.
 
@@ -65,6 +71,14 @@ Close:
 > Intel makes the physical-AI loop fast enough to matter. Gatekeeper makes machine-speed action governable. Capability proposes. Authority decides.
 
 Credit AI Infra Summit, lablab.ai and Native as the event/hackathon ecosystem separately from the technical sponsor proof.
+
+## Deeper technical answer if a judge asks
+
+If asked what the mathematics contributes, keep it concise:
+
+> We model authority as an invariant-preserving transition system. The invariant defines an admissible state space. The planner can choose among possibilities, but only transitions that remain in that space may execute. The invariant constrains action; it does not pretend to be the planner.
+
+Do not introduce the exploratory whiteboard notation or GOI comparison unless the discussion specifically turns to research methodology. Those are documented in `AUTHORITY_INVARIANT.md` and are not required for the primary pitch.
 
 ## Demo recovery rules
 

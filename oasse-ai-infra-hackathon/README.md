@@ -2,13 +2,15 @@
 
 This is Oak & Sparrow Systems Enterprise LLC's AI Infra hackathon integration. A model may be capable of proposing a movement without having authority to cause it. The application keeps evidence, planning, authority and execution separate, with a decision receipt before dispatch and an outcome receipt after every attempted effect.
 
+The conceptual model is an invariant-preserving transition system: authority defines the admissible state-transition space rather than merely attaching a rule to a completed plan. See [Authority as an Invariant-Preserving Transition System](docs/AUTHORITY_INVARIANT.md).
+
 ## Current runnable paths
 
 The default service runs synthetic perception, a scripted proposal generator, the local reference authority engine and a simulated actuator. It provides a lightweight dashboard and API without requiring OpenVINO, MuJoCo or robot hardware.
 
 The native simulation path uses actual MuJoCo dynamics in an independently authored three-axis Cartesian carrier scene. The native vision path adds rendered RGB frames and a real compiled OpenVINO IR graph before authority evaluation and controlled physics execution. Its included graph compares pixels against a reference image; it is not a trained anomaly model. Workspace and geometry context are explicitly labeled simulator ground truth. Neither path is an SO-101 or bimanual grasp-and-sort demonstration.
 
-See [Phase 2 runtime](docs/PHASE2_RUNTIME.md), [Phase 3 native perception](docs/PHASE3_NATIVE_PERCEPTION.md), and [Jackson's perception handoff](docs/JACKSON_PERCEPTION.md) for exact boundaries and integration instructions.
+See [Architecture](docs/ARCHITECTURE.md), [Phase 2 runtime](docs/PHASE2_RUNTIME.md), [Phase 3 native perception](docs/PHASE3_NATIVE_PERCEPTION.md), and [Jackson's perception handoff](docs/JACKSON_PERCEPTION.md) for exact boundaries and integration instructions.
 
 ## Run the default demo
 
@@ -38,6 +40,8 @@ Headless Ubuntu needs the `libosmesa6` system package for the vision example. Se
 
 The intended path is `camera -> perception -> EvidenceFrame -> VLA proposal -> ProposedAction -> Gatekeeper -> authorized action -> actuator -> outcome receipt`.
 
+Conceptually, if `I` is the governing invariant and `X_I={x:I(x)=iota}` is the admissible state space, an executable transition must remain inside `X_I`. In compact form, `C_I:X_I -> X_I`. The planner chooses proposals; authority determines whether the exact proposed transition is admissible. This does not imply that the invariant chooses the unique next action.
+
 `ALLOW` permits the unchanged proposal. `TRANSFORM` requires an explicitly authorized physical change, not a metadata-only or timestamp-only edit. `HOLD` and `DENY` never dispatch. The live adapter rejects missing or malformed authorized actions, identity rebinding, contradictory ALLOW payloads and nonfinite or wrongly typed values. Transport failures and malformed responses produce fail-closed decisions rather than allowing the action.
 
 The local dispatcher may remove permission but cannot grant it. It snapshots evidence and proposals, validates returned authority decisions and gives the actuator its own isolated action copy. Evidence freshness is checked before dispatch and after receipt creation. A monotonic lease prevents an unchanged wall clock from extending an already-issued evidence deadline. Reused identities and non-increasing capture sequences are held. Identical pixels in a genuinely new capture are not automatically treated as replay. The native simulator additionally checks freshness and action binding before each physics step.
@@ -45,6 +49,12 @@ The local dispatcher may remove permission but cannot grant it. It snapshots evi
 The `dispatch_attempted` field records invocation of an actuator. `executed` requires an explicit success response, rather than merely a callback returning without raising. Unknown status or exceptions produce an unknown outcome, including possible partial effects. Every attempted dispatch gets an outcome receipt. A blocked command does not invoke the actuator. Receipt data is copied to strict finite JSON and chain appends are synchronized. A corrupted prior chain blocks new effects.
 
 These controls operate within one process with trusted integration components. They are not a sandbox against malicious code with direct access to a robot or simulator. Replay state and receipts remain in memory; restart persistence, source authentication, physical braking and hardware emergency stops are separate requirements.
+
+## Perception is not authority
+
+The default and native scenarios intentionally keep perception and authority separate. A defect/anomaly score is an observation, not itself a denial condition. A planner can use that fact to propose the reject path while Gatekeeper still returns ALLOW because the resulting transition satisfies the declared authority policy.
+
+**Perception supplies facts. Authority determines admissibility.**
 
 ## API
 

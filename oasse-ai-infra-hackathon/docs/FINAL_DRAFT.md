@@ -48,6 +48,42 @@ The planner never grants itself permission. Gatekeeper evaluates the exact evide
 
 The final dispatch gate independently checks binding, evidence age, replay state, scene state and receipt integrity before allowing an actuator call.
 
+## Deeper mathematical architecture
+
+The stronger formulation is that authority defines the admissible state space rather than merely checking a rule after planning.
+
+Let `I` be the governing invariant and `\iota` the value that must survive execution:
+
+$$
+\boxed{I(x_{n+1})=I(x_n)=\iota}.
+$$
+
+Define
+
+$$
+X_I=\{x\in X:I(x)=\iota\}.
+$$
+
+Then an executable controlled transition must remain inside that set:
+
+$$
+\boxed{C_I:X_I\rightarrow X_I}.
+$$
+
+This gives the whole build a compact architectural description:
+
+```text
+Observe -> Propose -> Project into the admissible state space -> Execute -> Prove
+```
+
+The current Gatekeeper verdicts are the operational realization of that projection. ALLOW preserves an admissible proposal. TRANSFORM substitutes an explicitly authorized admissible action. HOLD/DENY produce no executable transition.
+
+Two distinctions matter. First, **perception supplies facts while authority determines admissibility**. A detected defect can still lead to an allowed reject-route action. Second, **the invariant is not the planner**. It constrains what may happen but does not claim to choose the uniquely optimal action among all admissible choices.
+
+The Asimov connection is therefore structural rather than literary: instead of merely asking the robot to remember a linguistic law, the architecture attempts to restrict its executable transition space. This is an engineering formulation, not a claim that ethics have been solved mathematically.
+
+The detailed formulation, including the GOI methodological analogy and explicit non-theorem treatment of the original whiteboard notation, is in [AUTHORITY_INVARIANT.md](AUTHORITY_INVARIANT.md).
+
 ## Why this is different
 
 The novelty is not another VLA, anomaly detector or robot rule set. The contribution is an explicit machine-speed authority layer between proposal and effect.
@@ -114,7 +150,7 @@ Show the camera frame and explicitly identify the Intel/OpenVINO inference path.
 
 ### 2. Defective object
 
-Show the visible defect and the anomaly score/localization from the onsite detector workflow. The planner proposes the reject destination. Gatekeeper authorizes the exact action. The robot routes the object to reject and the post-action observation confirms the result.
+Show the visible defect and the anomaly score/localization from the onsite detector workflow. Treat that anomaly as evidence, not as an automatic authority violation. The planner proposes the reject destination. Gatekeeper authorizes the exact action when that transition remains admissible. The robot routes the object to reject and the post-action observation confirms the result.
 
 ### 3. Overspeed proposal
 
@@ -122,7 +158,7 @@ Show a proposal above the configured movement limit. Gatekeeper returns TRANSFOR
 
 ### 4. Stale evidence
 
-Reuse an otherwise valid proposal after its evidence exceeds the configured freshness window. The Intel perception and robotics capabilities remain available, but the evidence is no longer current enough to justify the action. Gatekeeper/dispatch HOLD the action and no movement starts.
+Reuse an otherwise valid proposal after its evidence exceeds the configured freshness window. The Intel perception and robotics capabilities remain available, but the evidence is no longer current enough for that state transition to remain admissible. Gatekeeper/dispatch HOLD the action and no movement starts.
 
 ### 5. Authority unavailable
 
@@ -130,7 +166,7 @@ Show that loss of the authority endpoint produces HOLD with no actuator call. Th
 
 ## What judges should see in under one minute
 
-Intel's stack gives the system the ability to perceive and act at machine speed. The model proposes. The robot is capable. An independent authority layer can still allow, constrain or stop the physical effect. The system then proves which action was authorized before execution and records what happened afterward.
+Intel's stack gives the system the ability to perceive and act at machine speed. The model proposes. The robot is capable. Gatekeeper constrains the system to the currently admissible transition set and can allow, transform or stop the physical effect. The system then proves which action was authorized before execution and records what happened afterward.
 
 ## Measurements
 
@@ -185,3 +221,5 @@ A final submission should include:
 ## Claim boundary
 
 The strongest version of the project is the version supported by the final evidence. Before onsite hardware traces exist, describe the current state as a complete software rehearsal prepared for hardware binding. After hardware runs succeed, update only the claims directly proven by those traces. Do not collapse simulation, operator attestation and production-service verification into one undifferentiated claim.
+
+The invariant architecture is likewise a conceptual explanation of the existing implementation, not a claim that GOI has solved quantum gravity or that a single invariant uniquely determines every correct physical action.
