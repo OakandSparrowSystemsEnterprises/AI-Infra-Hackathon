@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 import math
@@ -25,6 +25,10 @@ class EvidenceFrame:
     target_label: str = "cube"
     camera_id: str = "camera-1"
     frame_hash: str = "demo-frame"
+    anomaly_bbox_xyxy: Optional[List[float]] = None
+    object_pose_xyzrpy: Optional[List[float]] = None
+    object_dimensions_xyz: Optional[List[float]] = None
+    frame_sequence: Optional[int] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     @staticmethod
@@ -65,18 +69,12 @@ class ProposedAction:
         )
 
 
-# Fields whose change makes one ProposedAction physically different from
-# another. metadata and requested_at_ms are informational only.
 PHYSICAL_ACTION_FIELDS = ("action_type", "target_bin", "speed_mps", "object_id", "trajectory")
 SPEED_REL_TOL = 1e-9
 
 
 def physically_changed(candidate: "ProposedAction", original: "ProposedAction") -> bool:
-    """True when the two actions differ in any physical field.
-
-    Speed is compared with a relative tolerance so floating-point noise is
-    not mistaken for a transformation.
-    """
+    """True when the two actions differ in any physical field."""
     for name in PHYSICAL_ACTION_FIELDS:
         a, b = getattr(candidate, name), getattr(original, name)
         if name == "speed_mps":

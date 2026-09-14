@@ -7,9 +7,9 @@ from .gatekeeper_client import AuthorityClient, build_authority_client
 from .metrics import Metrics
 from .models import AuthorityDecision, DispatchResult, Verdict, physically_changed
 from .receipts import ReceiptChain
-from .providers.actuator import SimulatedActuator
-from .providers.perception import MockPerceptionProvider
-from .providers.vla import MockVLAProvider
+from .providers.actuator import Actuator, SimulatedActuator
+from .providers.perception import MockPerceptionProvider, PerceptionProvider
+from .providers.vla import MockVLAProvider, VLAProvider
 
 
 def executable(decision: AuthorityDecision) -> bool:
@@ -28,11 +28,17 @@ def executable(decision: AuthorityDecision) -> bool:
 
 
 class PhysicalAIOrchestrator:
-    def __init__(self, authority: Optional[AuthorityClient] = None) -> None:
+    def __init__(
+        self,
+        authority: Optional[AuthorityClient] = None,
+        perception: Optional[PerceptionProvider] = None,
+        vla: Optional[VLAProvider] = None,
+        actuator: Optional[Actuator] = None,
+    ) -> None:
         self.authority = authority or build_authority_client()
-        self.perception = MockPerceptionProvider()
-        self.vla = MockVLAProvider()
-        self.actuator = SimulatedActuator()
+        self.perception = perception or MockPerceptionProvider()
+        self.vla = vla or MockVLAProvider()
+        self.actuator = actuator or SimulatedActuator()
         self.receipts = ReceiptChain()
         self.metrics = Metrics()
 

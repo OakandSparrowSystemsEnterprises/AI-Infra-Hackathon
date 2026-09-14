@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+from typing import Protocol
+
 from ..models import EvidenceFrame, ProposedAction
+
+
+class VLAProvider(Protocol):
+    def propose(self, evidence: EvidenceFrame, scenario: str = "allow") -> ProposedAction: ...
 
 
 class MockVLAProvider:

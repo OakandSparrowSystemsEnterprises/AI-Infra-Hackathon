@@ -1,7 +1,12 @@
 from __future__ import annotations
 
-from typing import Dict
+from typing import Dict, Protocol
+
 from ..models import ProposedAction
+
+
+class Actuator(Protocol):
+    def execute(self, action: ProposedAction) -> Dict[str, object]: ...
 
 
 class SimulatedActuator:
