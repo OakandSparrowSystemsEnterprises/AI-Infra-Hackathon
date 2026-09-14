@@ -2,6 +2,10 @@
 
 This is the focused arrival plan for the Intel Physical AI Challenge. The objective is to turn the existing software rehearsal into the onsite hardware proof with the minimum possible integration churn.
 
+## Track-name sanity check
+
+Intel's official event material calls this the **Physical AI Challenge**. LabLab's live dashboard currently labels the same onsite lane **Intel On-Site** and separately lists **Intel Online**. Treat **Intel On-Site / Intel Physical AI Challenge** as our lane. Do not switch into Intel Online merely because the dashboard uses a shorter label.
+
 ## Before leaving
 
 - Event app registration complete.
@@ -23,7 +27,7 @@ Conference registration opens at **7:30 AM**. Target arrival is **7:45-8:00 AM**
 
 1. Scan the event-app QR code and print badge/lanyard.
 2. Go directly to Hackathon Rooms **203/204**.
-3. Identify the Intel table/mentor contact and confirm the team is on the **Intel Physical AI Challenge**.
+3. Identify the Intel table/mentor contact and confirm the team is on **Intel On-Site / Intel Physical AI Challenge**.
 4. Do not switch tracks or chase other sponsor demos while the build path is unverified.
 
 ### 9:00 — Hardware distribution begins
@@ -91,6 +95,8 @@ Our build should consume those components through the existing adapter seams rat
 Official resource:
 https://docs.openedgeplatform.intel.com/dev/edge-ai-suites/robotics-ai-suite/resources/hackathon_resources.html
 
+Physical AI Studio's public project supports Python API, CLI and GUI workflows, with deployable policy exports including OpenVINO. Its public inference surface uses a model `select_action(observation)` style loop. If the onsite mentors give us that path, wrap the observation/action translation inside `onsite/onsite_bridge.py`; do not move sponsor-specific tensor or coordinate conventions into the authority core. The Studio is a public-preview project, so onsite mentor instructions override assumptions about exact API shape.
+
 ## Questions to get answered immediately by the Intel engineer
 
 Get these answers before changing code:
@@ -120,7 +126,7 @@ LabLab's general guide says a complete submission normally includes:
 - a working prototype others can use online;
 - a video presentation;
 - a pitch deck;
-- repository access/GitHub as part of the project evidence.
+- a public GitHub repository.
 
 The event-specific **11:10 AM submission workshop is authoritative** if it differs from the general guide. Confirm the following there:
 
@@ -128,7 +134,7 @@ The event-specific **11:10 AM submission workshop is authoritative** if it diffe
 - whether a live public demo URL is required for this physical-hardware track;
 - pitch-video duration and upload format;
 - slide-deck format/page limits;
-- track selection;
+- exact track selection (`Intel On-Site` in the current LabLab UI);
 - required sponsor technology fields;
 - whether onsite judges evaluate live hardware independently of the online submission.
 
@@ -138,7 +144,7 @@ Do not make the private repository public until the event-specific requirement i
 
 Until the Intel path is green:
 
-- no switching to Qualcomm or SiMa tracks;
+- no switching to Intel Online, Qualcomm or SiMa tracks;
 - no architecture rewrites;
 - no new research layer;
 - no broad Summit networking block;

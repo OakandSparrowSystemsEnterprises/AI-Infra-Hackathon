@@ -41,7 +41,24 @@ The code already has a stable boundary for each thing an onsite sponsor engineer
 | Controller with continuous validity callback | `SponsorGuardedActuator` | same command plus `still_authorized()` |
 | Stop / brake / E-stop | lower controller or `SponsorGuardedActuator` integration | actual stop behavior must be observed onsite, never inferred |
 
-Transport details stay **inside the callback**. If Intel gives us a Python API, ROS2 service, REST endpoint, local socket, or controller object, only the thin callback changes. The orchestrator, Gatekeeper client, replay guard, receipts, and policy semantics do not.
+Transport details stay **inside the callback**. If Intel gives us a Python API, ROS2 service, REST endpoint, local socket, controller object, or Physical AI Studio inference object, only the thin callback changes. The orchestrator, Gatekeeper client, replay guard, receipts, and policy semantics do not.
+
+## Physical AI Studio fast path
+
+The public Physical AI Studio project exposes Python, CLI and GUI workflows and can export policies to OpenVINO, ONNX or Torch. Its documented deployment loop uses an inference model with a `select_action(observation)` style call. That maps cleanly to our planner seam:
+
+```python
+# local/ignored onsite_bridge.py
+
+def plan(evidence):
+    observation = build_sponsor_observation(evidence)
+    raw_action = policy.select_action(observation)
+    return translate_sponsor_action(raw_action, evidence)
+```
+
+The translator is the only place sponsor-specific tensor shapes, joint order, coordinate frames and units should live. Its return value must satisfy the repository's explicit `ProposedAction` contract. Do not pass raw model tensors directly into Gatekeeper or the robot.
+
+Physical AI Studio is currently a public-preview project and its APIs/workflows may change. **Onsite Intel mentor instructions are authoritative for the exact invocation.** The bridge exists so such a change costs one callback, not an architecture rewrite.
 
 ## Fast binding workflow
 
