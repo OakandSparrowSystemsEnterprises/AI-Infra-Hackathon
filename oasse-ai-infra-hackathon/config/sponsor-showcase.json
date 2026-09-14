@@ -1,0 +1,57 @@
+{
+  "schema": "oasse.sponsor-showcase.v1",
+  "challenge_sponsor": {
+    "name": "Intel",
+    "challenge": "Intel Physical AI Challenge",
+    "role": "Physical AI compute, inference and robotics software stack",
+    "showcase_principle": "Sponsor technology must be visible in the proof, not only listed as a dependency."
+  },
+  "event_ecosystem": [
+    {
+      "name": "AI Infra Summit",
+      "role": "event platform"
+    },
+    {
+      "name": "lablab.ai",
+      "role": "hackathon co-organizer and builder ecosystem"
+    },
+    {
+      "name": "Native",
+      "role": "hackathon co-organizer"
+    }
+  ],
+  "intel_showcase": [
+    {
+      "component": "Intel Core Ultra",
+      "demo_moment": "onsite execution host",
+      "claim_state": "onsite target until hardware is observed"
+    },
+    {
+      "component": "OpenVINO",
+      "demo_moment": "live evidence inference and runtime/device readout",
+      "claim_state": "native software rehearsal verified"
+    },
+    {
+      "component": "Anomalib",
+      "demo_moment": "normal-versus-defective evidence and anomaly localization",
+      "claim_state": "onsite trained-model target until recorded"
+    },
+    {
+      "component": "Physical AI Studio",
+      "demo_moment": "onsite robot/VLA workflow and integration surface",
+      "claim_state": "onsite target until recorded"
+    },
+    {
+      "component": "Robotics AI Suite",
+      "demo_moment": "onsite robotics runtime and deployment path",
+      "claim_state": "onsite target until recorded"
+    }
+  ],
+  "presentation_rules": [
+    "Name the Intel component when its output is shown.",
+    "Show runtime/device/model evidence on screen instead of only saying the stack is integrated.",
+    "Tie each sponsor component to a measurable or visible contribution.",
+    "Keep pending onsite claims labeled pending until recorded evidence exists.",
+    "Do not add third-party logos or assets to the greenfield MIT repository unless licensing is explicitly cleared."
+  ]
+}

@@ -60,6 +60,28 @@ That distinction produces several properties that are visible in the demo:
 4. Replayed evidence cannot be used to authorize another physical effect.
 5. The system records what was observed, what was proposed, what was authorized, what was dispatched and what was observed afterward.
 
+## Sponsor showcase: Intel should be visible in the proof
+
+Intel is not treated as a logo or a package dependency in this project. The sponsor story is part of the architecture and live demonstration.
+
+**Intel supplies the physical-AI capability surface. Gatekeeper supplies the independent authority surface.**
+
+The onsite story should visibly connect:
+
+```text
+Intel edge/physical-AI host
+  -> OpenVINO inference
+  -> Anomalib anomaly evidence when the trained workflow is available
+  -> Physical AI / VLA workflow
+  -> Gatekeeper authority
+  -> Intel robotics execution path
+  -> verified physical outcome
+```
+
+When each Intel component is used, show what it contributes. Put the OpenVINO runtime/device and inference result on screen. Show anomaly score/localization for the defect case. If Physical AI Studio and Robotics AI Suite are used onsite, show their actual workflow/runtime role rather than only naming them on a slide.
+
+The framing is complementary: Intel makes perception and physical execution fast and practical; Gatekeeper makes the resulting machine-speed action governable. See `docs/SPONSOR_SHOWCASE.md` for the exact presentation and evidence plan.
+
 ## Intel integration
 
 The software rehearsal exercises native OpenVINO inference and native MuJoCo dynamics. The onsite target is the event-provided Intel Physical AI stack, including the available camera path, OpenVINO/Anomalib detector workflow, LeRobot or event-selected VLA path, and robot runtime.
@@ -88,11 +110,11 @@ The preferred live demonstration is deliberately short and visual.
 
 ### 1. Normal object
 
-Show the camera frame, detector evidence and proposed accept action. Gatekeeper returns ALLOW. The robot performs the permitted action. A new observation confirms the object reached the expected destination. Show the linked decision and outcome receipts.
+Show the camera frame and explicitly identify the Intel/OpenVINO inference path. Show the detector evidence and proposed accept action. Gatekeeper returns ALLOW. The robot performs the permitted action. A new observation confirms the object reached the expected destination. Show the linked decision and outcome receipts.
 
 ### 2. Defective object
 
-Show the visible defect and corresponding detector evidence. The planner proposes the reject destination. Gatekeeper authorizes the exact action. The robot routes the object to reject and the post-action observation confirms the result.
+Show the visible defect and the anomaly score/localization from the onsite detector workflow. The planner proposes the reject destination. Gatekeeper authorizes the exact action. The robot routes the object to reject and the post-action observation confirms the result.
 
 ### 3. Overspeed proposal
 
@@ -100,7 +122,7 @@ Show a proposal above the configured movement limit. Gatekeeper returns TRANSFOR
 
 ### 4. Stale evidence
 
-Reuse an otherwise valid proposal after its evidence exceeds the configured freshness window. The planner can still propose and the actuator remains technically available, but Gatekeeper/dispatch HOLD the action and no movement starts.
+Reuse an otherwise valid proposal after its evidence exceeds the configured freshness window. The Intel perception and robotics capabilities remain available, but the evidence is no longer current enough to justify the action. Gatekeeper/dispatch HOLD the action and no movement starts.
 
 ### 5. Authority unavailable
 
@@ -108,13 +130,13 @@ Show that loss of the authority endpoint produces HOLD with no actuator call. Th
 
 ## What judges should see in under one minute
 
-A model proposes. A robot is capable. An independent authority layer can still allow, constrain or stop the physical effect. The system then proves which action was authorized before execution and records what happened afterward.
+Intel's stack gives the system the ability to perceive and act at machine speed. The model proposes. The robot is capable. An independent authority layer can still allow, constrain or stop the physical effect. The system then proves which action was authorized before execution and records what happened afterward.
 
 ## Measurements
 
 Report measurements from the frozen final run only. Keep these categories separate:
 
-- perception/inference latency;
+- OpenVINO/perception inference latency;
 - authority-service latency;
 - client/network elapsed time;
 - perception-to-authority end-to-end latency;
@@ -138,6 +160,10 @@ No source, assets, notebooks or model weights from the external LeRobot/MuJoCo t
 
 The proprietary Gatekeeper production/runtime source, proprietary policy corpus, credentials, private infrastructure and other undistributed OASSE technology are not in this repository. The live build consumes the production authority service only through the MIT-licensed HTTP adapter.
 
+## Event ecosystem credit
+
+AI Infra Summit, lablab.ai and Native are credited as the event/hackathon ecosystem that created the build environment and sponsor challenge. Keep this separate from the technical sponsor proof so the final presentation accurately attributes each party's role.
+
 ## Submission package
 
 A final submission should include:
@@ -147,6 +173,7 @@ A final submission should include:
 - demo video URL;
 - concise project description;
 - architecture diagram or architecture section;
+- sponsor runtime evidence from `scripts/sponsor_showcase.py`;
 - reproducible run instructions;
 - final test count and CI status;
 - native software rehearsal evidence;

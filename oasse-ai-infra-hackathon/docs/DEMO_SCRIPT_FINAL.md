@@ -2,35 +2,37 @@
 
 Target length: 2 to 3 minutes. Keep the hardware result and software fallback clearly separated.
 
-## 0:00-0:20 — Open
+## 0:00-0:20 — Open with the sponsor story
 
-> Physical AI is getting very good at deciding what it *can* do. We built the missing layer that decides what it is *allowed* to do. Gatekeeper sits between a model's proposed action and the physical effect.
+> We're building on Intel's Physical AI stack because the interesting governance problem appears when perception and robotics get fast enough to close the loop. Intel gives the system machine-speed capability. Gatekeeper adds the independent boundary that decides whether that exact capability is authorized to become physical action now.
 
-Show the architecture path and the effective authority mode.
+Show the architecture path, OpenVINO/runtime evidence and effective authority mode.
 
-## 0:20-0:50 — Normal object
+## 0:20-0:50 — Intel inference, normal object
 
-Show the live frame and normalized evidence.
+Show the live frame and normalized evidence. Name the actual Intel component visible in the trace.
 
-> The detector sees a normal object. The planner proposes the accept path, but that proposal has no authority by itself. Gatekeeper evaluates the exact evidence and exact action before anything reaches the robot.
+> This frame is processed through the Intel inference path. The detector sees a normal object and the planner proposes the accept path, but that proposal has no authority by itself. The inference result becomes evidence. Gatekeeper evaluates the exact evidence and exact action before anything reaches the robot.
 
 Run the action. Show ALLOW, dispatch and the post-action verification.
 
-> We record the decision before execution, then independently record the observed result afterward.
+> Intel handles the physical-AI capability. We record the authority decision before execution, then independently record the observed result afterward.
 
-## 0:50-1:15 — Defective object
+## 0:50-1:15 — Anomaly evidence, defective object
 
-Place/show the visibly defective object.
+Place/show the visibly defective object. If the trained Anomalib workflow is live, show its score and localization on screen and name it explicitly.
 
-> Now the evidence changes. The planner proposes the reject path. The same authority boundary evaluates that new proposal against that new evidence.
+> Now the Intel perception evidence changes. The anomaly result identifies the defect, and the planner proposes the reject path. The same independent authority boundary evaluates that new proposal against that new evidence.
 
 Run the action. Show reject placement and post-action evidence.
+
+If the trained Anomalib workflow is not yet verified, say so and use the reference-detector trace rather than claiming it.
 
 ## 1:15-1:40 — TRANSFORM
 
 Present an overspeed proposal.
 
-> This proposal is valid in shape but outside the permitted movement envelope. Gatekeeper does not simply say yes or no. It returns TRANSFORM with the exact constrained action that may execute.
+> The physical-AI stack is capable of issuing this proposal, but capability is not authority. This command is outside the permitted movement envelope. Gatekeeper returns TRANSFORM with the exact constrained action that may enter the robotics execution path.
 
 Show proposed speed, authorized speed and measured execution speed. Emphasize that the original overspeed action never reaches the actuator.
 
@@ -38,7 +40,7 @@ Show proposed speed, authorized speed and measured execution speed. Emphasize th
 
 Use stale evidence or an intentionally expired frame.
 
-> This is the important failure case. The planner still works. The robot still works. The credentials can still be valid. The only thing that changed is whether this evidence is fresh enough to justify the action.
+> This is the important failure case. OpenVINO still works. The planner still works. The robot still works. The only thing that changed is whether this evidence is current enough to justify physical action.
 
 Show HOLD and zero new movement.
 
@@ -52,15 +54,17 @@ If the live demo permits it, point the adapter at the declared unavailable test 
 
 Show HOLD and no actuator call.
 
-## 2:25-2:45 — Receipts and close
+## 2:25-2:45 — Receipts and sponsor close
 
-Show the linked decision/outcome verification view.
+Show the linked decision/outcome verification view and, if available, the Intel runtime/device/model readout from `scripts/sponsor_showcase.py`.
 
-> Every physical effect has a before-and-after accountability chain: what was observed, what was proposed, what was authorized, what was dispatched and what was observed afterward.
+> Every physical effect has a before-and-after accountability chain: what Intel's perception path observed, what the model proposed, what was authorized, what entered the robot path and what was observed afterward.
 
 Close:
 
-> Intel makes physical AI faster. Gatekeeper makes machine-speed action governable. Capability proposes. Authority decides.
+> Intel makes the physical-AI loop fast enough to matter. Gatekeeper makes machine-speed action governable. Capability proposes. Authority decides.
+
+Credit AI Infra Summit, lablab.ai and Native as the event/hackathon ecosystem separately from the technical sponsor proof.
 
 ## Demo recovery rules
 
