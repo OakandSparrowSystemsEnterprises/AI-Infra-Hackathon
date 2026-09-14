@@ -91,6 +91,9 @@ class ReceiptChain:
         text(receipt_type, "receipt_type")
         if not isinstance(payload, dict):
             raise TypeError("receipt payload must be an object")
+        # ``plain`` builds the detached public snapshot once. Internal chain
+        # state stores only its canonical bytes, so returning ``snapshot`` here
+        # does not create an alias into the chain and avoids a JSON decode.
         snapshot = plain(payload)
         payload_json = _canonical_plain(snapshot)
         payload_hash = sha256_hex(payload_json)
@@ -107,7 +110,8 @@ class ReceiptChain:
                                     record.payload_json)
             self._receipts.append(record)
             self._head = receipt_hash
-            return self._materialize(record)
+            return Receipt(record.receipt_id, record.receipt_type, record.created_at_ms,
+                           record.payload_hash, record.prev_hash, record.receipt_hash, snapshot)
 
     def all(self) -> List[Receipt]:
         with self._lock:

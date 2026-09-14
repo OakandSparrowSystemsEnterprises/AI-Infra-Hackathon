@@ -88,10 +88,10 @@ class PhysicalAIOrchestrator:
                               {"status": "NOT_EXECUTED", "reason": reason}, None, elapsed, False)
 
     def _evaluate_checked(self, evidence: EvidenceFrame, action: ProposedAction) -> AuthorityDecision:
-        # Keep canonical local snapshots and hand independent copies across the
-        # authority boundary. Direct structural equality is sufficient after
-        # validation and is materially cheaper than repeated JSON+SHA passes.
-        safe_evidence, safe_action = copy_evidence(evidence), copy_action(action)
+        # ``evidence`` and ``action`` are already private validated snapshots.
+        # Only the authority-facing copies cross the trust boundary. That keeps
+        # the local baseline isolated while avoiding two redundant deep copies.
+        safe_evidence, safe_action = evidence, action
         authority_evidence, authority_action = copy_evidence(safe_evidence), copy_action(safe_action)
         try:
             received = self.authority.evaluate(authority_evidence, authority_action)
@@ -112,6 +112,8 @@ class PhysicalAIOrchestrator:
             self._check_chain()
             validate_inputs(evidence, action)
             start = time.perf_counter_ns()
+            # API callers own their input objects, so take the private canonical
+            # snapshot here before entering the shared evaluation path.
             decision = self._evaluate_checked(copy_evidence(evidence), copy_action(action))
             self.receipts.seal("AUTHORITY_DECISION", decision.to_dict())
             self.metrics.record(decision.verdict.value, decision.authority_latency_ms,
@@ -128,12 +130,12 @@ class PhysicalAIOrchestrator:
             return "DISPATCH_CHECK_FAILED"
 
     def _invoke(self, decision: AuthorityDecision, deadline: int) -> tuple[bool, dict]:
-        # The actuator never receives the same mutable nested structures stored
-        # in the decision. Equality against a detached baseline detects mutation
-        # without canonical JSON/SHA work on every native physics step.
-        sent = copy_action(decision.authorized_action)
-        expected = copy_action(sent)
-        evidence = copy_evidence(decision.evidence)
+        # Keep the decision's authorized action as the untouched local baseline.
+        # The actuator receives one detached deep copy. Any mutation of that copy
+        # is therefore visible by direct equality without JSON/SHA work per step.
+        expected = decision.authorized_action
+        sent = copy_action(expected)
+        evidence = decision.evidence
 
         def check_step() -> str | None:
             try:
