@@ -51,7 +51,7 @@ class MuJoCoRGBCamera:
             scene = self.renderer.scene
             if scene.ngeom >= scene.maxgeom:
                 raise RuntimeError("no room for visual defect fixture")
-            position = self.runtime.model.body("cube").pos.copy()
+            position = self.runtime.data.body("cube").xpos.copy()
             position[2] += .0253
             self.runtime.mj.mjv_initGeom(scene.geoms[scene.ngeom], self.runtime.mj.mjtGeom.mjGEOM_BOX,
                 self.runtime.np.array([.008, .008, .0002]), position,
@@ -63,7 +63,7 @@ class MuJoCoRGBCamera:
         if pixels.shape != (self.spec.height, self.spec.width, 3) or pixels.dtype != self.runtime.np.uint8:
             raise ValueError("renderer returned an unexpected RGB format")
         self._sequence += 1
-        pose = tuple(float(x) for x in self.runtime.model.body("cube").pos) + (0., 0., 0.)
+        pose = tuple(float(x) for x in self.runtime.data.body("cube").xpos) + (0., 0., 0.)
         return RGBFrame(data=pixels.tobytes(order="C"), captured_at_ms=captured,
             camera_id="mujoco-rgb-camera", sequence=self._sequence,
             width=self.spec.width, height=self.spec.height,

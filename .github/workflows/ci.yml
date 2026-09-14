@@ -140,3 +140,13 @@ jobs:
             ${{ runner.temp }}/vision-artifacts
           if-no-files-found: warn
           retention-days: 14
+      - name: Full submission rehearsal
+        run: python scripts/rehearse_submission.py --profile native --output "$RUNNER_TEMP/submission-rehearsal"
+      - name: Save inspection and submission evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: submission-rehearsal
+          path: ${{ runner.temp }}/submission-rehearsal
+          if-no-files-found: error
+          retention-days: 14
