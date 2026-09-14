@@ -2,62 +2,123 @@
 
 ## Scope
 
-This pass is the final pre-onsite adversarial review of the governed execution architecture. It does not claim physical hardware validation. It asks a narrower question: **given the repository's declared trust boundary, can an unauthorized, stale, rebound, replayed, malformed, or ambiguously reported action become a confirmed physical effect through the governed path?**
+This is the final pre-onsite adversarial review of the governed execution architecture. It does not claim physical-hardware validation. It asks a narrower question:
 
-The answer after this pass is: not through the tested software path without violating an explicitly documented trust assumption.
+> **Given the repository's declared trust boundary, can an unauthorized, stale, rebound, replayed, malformed, ambiguously acknowledged, or unbounded remote action become a confirmed physical effect through the governed path?**
+
+After this pass, the tested software path fails closed for those cases unless an explicitly documented trust assumption is violated.
 
 ## Architectural invariants
 
-1. **Capability cannot self-authorize.** Perception and planning produce facts/proposals only.
-2. **Evidence and action identity remain bound.** The authority result must refer to the exact isolated evidence/action snapshots presented for evaluation.
-3. **ALLOW is identity.** An ALLOW may execute only the unchanged proposal.
-4. **TRANSFORM is substitution.** Only the explicit authorized replacement may execute, and it must differ in a physical field without rebinding actor/action/evidence identity.
+1. **Capability cannot self-authorize.** Perception and planning produce facts and proposals only.
+2. **Evidence and action identity remain bound.** Authority must decide against the exact isolated evidence/action snapshots presented for evaluation.
+3. **ALLOW is identity.** ALLOW may execute only the unchanged proposal.
+4. **TRANSFORM is substitution.** Only the explicit authorized replacement may execute; actor, action and evidence identity cannot be rebound.
 5. **HOLD and DENY are non-effects.** Neither reaches the actuator.
-6. **Freshness is checked again at dispatch.** A decision that was valid when evaluated can still lose launch authority.
+6. **Freshness is checked again at dispatch.** A decision valid during evaluation can still lose launch authority.
 7. **Dispatch is one-shot.** Evidence/action identities are atomically reserved before actuator invocation and are not automatically retried after uncertain effects.
-8. **Actuator acknowledgement is not task completion.** Execution and postcondition verification are separate records.
-9. **UNKNOWN remains unknown.** Exceptions, malformed acknowledgements and partial effects never become successful execution.
-10. **Receipt integrity is append-only and externally isolated.** Callers receive detached receipt snapshots and cannot mutate the internal chain by editing a returned object.
+8. **Execution confirmation is bound to the command.** `EXECUTED` is accepted only when the actuator explicitly acknowledges the matching action ID.
+9. **Actuator acknowledgement is not task completion.** Execution and postcondition verification remain separate records.
+10. **UNKNOWN remains unknown.** Exceptions, malformed acknowledgements and partial effects never become successful execution.
+11. **Receipt integrity is append-only and externally isolated.** Public receipt objects cannot mutate internal chain state.
+12. **Remote authority input is bounded.** Oversized, malformed, contradictory or insecurely transported authority traffic cannot become an executable command.
 
 ## Final hardening changes
 
-### Connection pooling and transport protection
+### Pooled, protected authority transport
 
-`GatekeeperClient` lazily creates one pooled `httpx.Client` on the first authority call and reuses it thereafter. That preserves fail-closed handling of client-construction failures while avoiding repeated TCP/TLS setup on the live decision path. Production authority endpoints require HTTPS; plain HTTP is accepted only for explicitly enabled loopback contract tests. Request and response bodies are size bounded, and service-controlled narrative fields are credential-redacted before they can enter receipts or reports.
+`GatekeeperClient` creates one pooled `httpx.Client` lazily on the first authority call and reuses it. Repeated decisions therefore avoid repeated TCP/TLS setup while client-construction failures still fail closed.
 
-### Snapshot isolation instead of repeated cryptographic fingerprints
+Production authority endpoints require HTTPS. Plain HTTP is accepted only for explicitly enabled loopback contract tests. `GATEKEEPER_TIMEOUT_S` is configurable and defaults to **0.25 seconds** so the authority call fails before the repository's default **500 ms** evidence-freshness window is exhausted. That default is an integration choice, not a universal production SLA; onsite measurements must validate the deployed network and service.
 
-Cross-plane mutation protection uses detached validated snapshots plus direct structural equality. The planner, authority adapter and actuator receive copies, never the nested structures held as the local canonical baseline. The final optimization removes redundant private-to-private copies while preserving a detached copy at every trust-boundary crossing. Cryptographic hashing remains where it belongs: evidence identity, receipts and exported evidence integrity.
+Request bodies are bounded. Response bodies are consumed through a bounded stream and rejected before JSON parsing if they exceed the limit, so the response limit is an actual memory boundary rather than a check performed after an arbitrarily large body has already been buffered.
 
-### Constant-time receipt gate
+Service-controlled narrative fields are bounded and credential-redacted. Unknown informational response fields are ignored rather than recursively traversed. Accepted textual action fields that echo the bearer credential make the response invalid rather than allowing the secret into executable state.
 
-The previous implementation fully re-walked the growing receipt chain before effects. Public receipts are detached from private immutable stored records, so a consumer cannot corrupt chain state through a returned payload. The hot-path integrity gate validates the immutable tail and adjacent link in O(1); full O(n) verification remains available at `/health`, receipt export and evidence verification. Receipt identity is hash-bound.
+### Snapshot isolation without redundant hot-path hashing
 
-### Single-sample dispatch validation
+Cross-plane mutation protection uses validated detached snapshots plus direct structural equality. The planner, authority adapter and actuator receive copies at the trust boundaries; the local canonical baseline remains separate.
 
-Replay/scene/freshness checking performs one freshness sample per guard call and atomically reserves evidence/action identity immediately before actuator invocation.
+This preserves mutation detection while removing repeated canonical JSON serialization and SHA-256 passes from the authority hot path and from every guarded physics step. Cryptographic hashing remains where it provides durable value: captured-evidence identity, receipt integrity and exported evidence verification.
+
+### Constant-time receipt execution gate
+
+The previous implementation re-walked the growing receipt chain before effects. Internal receipt records are now immutable and private, while callers receive detached snapshots. The pre-effect integrity check validates the chain tail and adjacent link in **O(1)**. Full **O(n)** verification remains available for `/health`, export and evidence review.
+
+Receipt identity is included in the hashed envelope, so changing a receipt ID invalidates the record. This is hash-chain integrity, not a digital signature or proof of sensor authenticity.
+
+### Atomic dispatch reservation and single-sample freshness checks
+
+Replay, sequence, scene and freshness checks share one locked dispatch-guard path. `reserve()` atomically rechecks launch conditions and consumes the evidence/action identities immediately before actuator invocation.
+
+A monotonic lease prevents wall-clock adjustment from extending already-issued freshness. The per-step guarded actuator path can recheck that lease without repeated canonical hashing.
+
+### Explicit execution acknowledgement binding
+
+An actuator may report `EXECUTED` only if its result explicitly contains the same `action_id` that was sent. A missing or mismatched action ID becomes `UNKNOWN` with `ACTUATOR_RESULT_BINDING_MISMATCH`; it is not counted as confirmed execution.
+
+The outcome receipt still records that dispatch was attempted, preserving uncertainty rather than inventing success or non-execution.
+
+### Bounded runtime telemetry
+
+Latency metrics now keep a bounded rolling window of **4096 samples** while lifetime run and verdict counters continue. A long-running service therefore does not grow metric sample storage without bound merely because the demo remains online.
 
 ### Stricter live contract
 
-Live authority timestamps must be exact non-negative 64-bit integers, reason-code collections and control strings are bounded, transformed trajectories must be bounded XYZ paths, and oversized or malformed authority traffic fails closed rather than being coerced into execution.
+Live authority timestamps must be exact non-negative 64-bit integers. Reason-code collections and control strings are bounded. Transformed trajectories must be bounded XYZ paths. Oversized requests/responses, invalid response structure, contradictory ALLOW payloads, invalid TRANSFORM payloads and authority outages fail closed.
 
 ## Latency discipline
 
-CI runs `scripts/benchmark_hot_path.py` on the reference path. It separately measures deterministic reference authority evaluation and complete synthetic governed dispatch while the receipt chain grows. The budgets are regression guards, not product benchmark claims:
+CI runs `scripts/benchmark_hot_path.py` as a regression guard. It separately measures:
 
-- reference authority p95 below **0.25 ms** on the GitHub runner;
-- synthetic governed pipeline p95 below **3.0 ms** on the GitHub runner.
+- deterministic local reference-authority evaluation; and
+- the complete synthetic governed dispatch path while the receipt chain grows.
 
-The benchmark excludes network transit, OpenVINO inference and physical robot time. Onsite measurements must report those components separately.
+The enforced CI budgets are:
+
+- reference authority p95 **< 0.25 ms**;
+- synthetic governed pipeline p95 **< 3.0 ms**.
+
+These are deliberately generous regression ceilings, not product benchmark claims. The benchmark excludes network transit, OpenVINO inference and physical robot time. Production Gatekeeper latency, onsite inference latency and robot timing must be reported independently from the actual frozen onsite run.
+
+The architecture optimizes only work that does not weaken the authority boundary. A lower latency number is not accepted if it removes binding, freshness, replay, receipt or outcome-integrity checks.
+
+## Review matrix
+
+| Review question | Current software answer |
+| --- | --- |
+| Can the planner approve itself? | No. Proposal and authority planes are separate. |
+| Can ALLOW rewrite motion? | No. ALLOW requires the unchanged proposal. |
+| Can TRANSFORM fall back to the original action? | No. Only the explicit authorized replacement is dispatchable. |
+| Can stale/future evidence launch? | No. Evaluation/dispatch freshness checks fail closed. |
+| Can the same evidence/action dispatch twice in-session? | No. Atomic reservation blocks replay. |
+| Can an authority response rebind actor/action/evidence identity? | No. Binding changes fail closed. |
+| Can an oversized remote response exhaust the declared parser budget? | It is rejected while streaming before JSON parse. |
+| Can an actuator say only `EXECUTED` without identifying the command? | No. Matching `action_id` is required for confirmed execution. |
+| Can a caller mutate the internal receipt chain via a returned payload? | No. Public receipts are detached snapshots. |
+| Does every hot-path decision reverify the entire receipt history? | No. O(1) tail gate; O(n) full audit remains available. |
+| Can metric samples grow forever? | No. Rolling latency samples are bounded. |
+| Does this prove hardware safety? | No. Hardware-layer guarantees remain onsite/lower-layer work. |
 
 ## What remains outside the proof
 
-A rigorous review should still reject any claim that this repository alone proves camera/source authenticity, durable replay protection across restart, OS-level isolation from malicious code with direct actuator access, physical braking or emergency-stop guarantees, collision avoidance beyond declared checks, production Gatekeeper identity without deployment attestation, trained Anomalib/VLA behavior before onsite traces, or real robot timing and safety performance.
+A rigorous reviewer should still reject any claim that this repository alone proves:
 
-Those are explicit integration or lower-layer responsibilities, not hidden assumptions.
+- camera/source authenticity;
+- durable replay and receipt state across process restart;
+- OS/device-level isolation from malicious code with direct actuator access;
+- physical braking or emergency-stop guarantees;
+- collision avoidance beyond the declared integration checks;
+- production Gatekeeper service identity without deployment attestation;
+- trained Anomalib/VLA behavior until onsite traces exist;
+- real robot safety, cycle time or control-loop timing before hardware runs;
+- network or production authority latency from the local CI benchmark;
+- signed/authenticated telemetry merely because receipt hashes verify.
+
+Those are explicit integration or lower-layer responsibilities, not hidden omissions.
 
 ## Review conclusion
 
-The architecture is intentionally narrow and compositional. Intel's Physical AI stack supplies perception and execution capability. Gatekeeper supplies a deterministic pre-execution authority boundary. The governed path isolates inputs, evaluates exact bindings, can transform or withhold authority, rechecks launch conditions, reserves a transition once, records uncertain outcomes honestly, and separately verifies the observed postcondition.
+The architecture is intentionally narrow and compositional. **INTEL's Physical AI stack supplies perception and execution capability. GATEKEEPER supplies the independent deterministic pre-execution authority boundary.** The governed path isolates inputs, evaluates exact bindings, can transform or withhold authority, rechecks launch conditions, atomically reserves a transition once, binds confirmed execution to the exact command, records uncertain outcomes honestly, and separately verifies the observed postcondition.
 
-The mathematics describes that structure as an invariant-preserving transition system; the code enforces the concrete contract that the demo can actually prove.
+The mathematical layer describes that structure as an invariant-preserving transition system. The code enforces the concrete contract that the demo can actually prove. The remaining unknowns require the onsite machine, camera, trained models, deployed Gatekeeper service and robot, not another speculative software layer.

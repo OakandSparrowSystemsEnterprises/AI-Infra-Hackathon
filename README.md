@@ -49,6 +49,7 @@ I(C_I(x))=I(x)=\iota.
 ## Read this first
 
 - [Senior engineer architecture review](oasse-ai-infra-hackathon/docs/SENIOR_ENGINEER_ARCHITECTURE.md)
+- [Final logic and hardening review](oasse-ai-infra-hackathon/docs/FINAL_LOGIC_REVIEW.md)
 - [Final project draft](oasse-ai-infra-hackathon/docs/FINAL_DRAFT.md)
 - [Authority invariant architecture](oasse-ai-infra-hackathon/docs/AUTHORITY_INVARIANT.md)
 - [Sponsor showcase strategy](oasse-ai-infra-hackathon/docs/SPONSOR_SHOWCASE.md)
