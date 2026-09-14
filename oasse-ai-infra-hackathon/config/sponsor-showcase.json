@@ -34,7 +34,7 @@
     {
       "component": "Anomalib",
       "demo_moment": "normal-versus-defective evidence and anomaly localization",
-      "claim_state": "onsite trained-model target until recorded"
+      "claim_state": "onsite target: trained model until recorded"
     },
     {
       "component": "Physical AI Studio",
