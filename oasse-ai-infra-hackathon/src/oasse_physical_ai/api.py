@@ -5,13 +5,14 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import Any, Dict
 
+from . import __version__
 from .gatekeeper_client import configured_authority_mode, describe_authority
 from .dispatch import validate_inputs
 from .models import EvidenceFrame, ProposedAction
 from .orchestrator import PhysicalAIOrchestrator, ReceiptIntegrityError
 from .dashboard import dashboard_html
 
-app = FastAPI(title="OASSE Physical AI Authority Demo", version="0.2.1")
+app = FastAPI(title="OASSE Physical AI Authority Demo", version=__version__)
 orchestrator = PhysicalAIOrchestrator()
 
 
@@ -24,8 +25,11 @@ class EvaluateRequest(BaseModel):
 def health() -> dict:
     valid = orchestrator.receipts.verify()
     return {"status": "ok" if valid else "degraded", "service": "oasse-physical-ai-authority",
-            "authority_boundary": "pre-execution", **describe_authority(orchestrator.authority),
-            "authority_mode_setting": configured_authority_mode(), "receipt_chain_valid": valid}
+            "version": __version__, "authority_boundary": "pre-execution", **describe_authority(orchestrator.authority),
+            "authority_mode_setting": configured_authority_mode(), "receipt_chain_valid": valid,
+            "perception_provider": type(orchestrator.perception).__name__,
+            "proposal_provider": type(orchestrator.vla).__name__,
+            "actuator": type(orchestrator.actuator).__name__}
 
 
 @app.post("/v1/evaluate")

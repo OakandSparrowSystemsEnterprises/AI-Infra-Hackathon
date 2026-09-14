@@ -8,6 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 import hashlib
 import hmac
+import math
+import os
 from pathlib import Path
 import re
 import stat
@@ -16,7 +18,7 @@ import time
 from typing import Any, Callable, Mapping
 
 from ..models import EvidenceFrame
-from ..normalization import number, text
+from ..normalization import integer, number, text
 from .openvino_adapter import CapturedFrame, OpenVINOPerceptionProvider
 
 
@@ -53,8 +55,12 @@ class RGBFrame(CapturedFrame):
 
 
 def _read_regular(path: Path, limit: int) -> bytes:
-    with path.open("rb") as stream:
-        info = __import__("os").fstat(stream.fileno())
+    if not path.is_file():
+        raise ValueError("model artifact must be a regular file")
+    # O_NONBLOCK prevents a swapped FIFO from blocking before fstat on Unix.
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0))
+    with os.fdopen(descriptor, "rb") as stream:
+        info = os.fstat(stream.fileno())
         if not stat.S_ISREG(info.st_mode) or info.st_size > limit:
             raise ValueError("model artifact is not a bounded regular file")
         data = stream.read(limit + 1)
@@ -72,7 +78,7 @@ def artifact_digest(xml: bytes, weights: bytes) -> str:
 
 
 class OpenVINOIRRunner:
-    """Compile a frozen artifact once and copy every input/output at inference."""
+    """Compile frozen artifacts and return detached per-inference provenance."""
 
     def __init__(self, xml_path: str | Path, spec: RGBSpec, *, device: str = "CPU",
                  expected_sha256: str | None = None) -> None:
@@ -101,7 +107,6 @@ class OpenVINOIRRunner:
         self.spec, self.device, self.model_sha256 = spec, device, digest
         self.ov, self.np = ov, np
         self.core = ov.Core()
-        # Compile the bytes that were hashed, not a pathname which could change.
         self.model = self.core.read_model(xml, weights)
         if len(self.model.inputs) != 1:
             raise ValueError("native RGB runner requires exactly one input")
@@ -111,7 +116,7 @@ class OpenVINOIRRunner:
         if not 1 <= len(self.model.outputs) <= 16:
             raise ValueError("unsupported model output count")
         for output in self.model.outputs:
-            if output.get_partial_shape().is_dynamic or int(np.prod(output.shape)) > 1000000:
+            if output.get_partial_shape().is_dynamic or math.prod(int(n) for n in output.shape) > 1000000:
                 raise ValueError("outputs must have bounded static shapes")
         config = {"PERFORMANCE_HINT": "LATENCY"}
         if device == "CPU":
@@ -121,11 +126,14 @@ class OpenVINOIRRunner:
         if not self.execution_devices:
             raise RuntimeError("execution device was not reported")
         self._request = self.compiled.create_infer_request()
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self.calls = 0
         self.last_latency_ms = 0.0
 
     def infer(self, data: bytes) -> dict[str, Any]:
+        return self.infer_with_provenance(data)[0]
+
+    def infer_with_provenance(self, data: bytes) -> tuple[dict[str, Any], dict]:
         tensor = self.spec.tensor(data)
         with self._lock:
             start = time.perf_counter_ns()
@@ -142,13 +150,14 @@ class OpenVINOIRRunner:
                 result[name] = value
             self.last_latency_ms = (time.perf_counter_ns() - start) / 1e6
             self.calls += 1
-            return result
+            return result, self.provenance()
 
     def provenance(self) -> dict:
-        return {"inference_backend": "openvino-native", "openvino_version": self.ov.__version__,
-                "model_sha256": self.model_sha256, "requested_device": self.device,
-                "execution_devices": list(self.execution_devices), "native_inference_calls": self.calls,
-                "native_inference_ms": self.last_latency_ms, "input_layout": "NCHW-f32-RGB-div255"}
+        with self._lock:
+            return {"inference_backend": "openvino-native", "openvino_version": self.ov.__version__,
+                    "model_sha256": self.model_sha256, "requested_device": self.device,
+                    "execution_devices": list(self.execution_devices), "native_inference_calls": self.calls,
+                    "native_inference_ms": self.last_latency_ms, "input_layout": "NCHW-f32-RGB-div255"}
 
 
 def export_reference_difference(reference_rgb: bytes, spec: RGBSpec, path: str | Path) -> str:
@@ -213,13 +222,20 @@ class NativeOpenVINOPerception:
                 raise TypeError("native inference requires an RGBFrame")
             if (frame.width, frame.height) != (self.runner.spec.width, self.runner.spec.height):
                 raise ValueError("frame dimensions do not match model contract")
+            if not isinstance(frame.data, (bytes, bytearray)) or len(frame.data) != frame.width*frame.height*3:
+                raise TypeError("capture must contain exact RGB8 bytes; integers are not images")
+            integer(frame.captured_at_ms, "captured_at_ms")
+            if frame.sequence is not None:
+                integer(frame.sequence, "sequence")
+            text(frame.camera_id, "camera_id")
+            if frame.scene_hash is not None:
+                text(frame.scene_hash, "scene_hash")
             if type(frame.workspace_clear) is not bool or frame.context_source == "unspecified":
                 raise ValueError("workspace context must be explicitly supplied, never guessed")
             text(frame.context_source, "context_source")
             data = bytes(frame.data)
-            # Construct one immutable capture for both hashing and inference.
             captured = replace(frame, data=data)
-            outputs = self.runner.infer(data)
+            outputs, provenance = self.runner.infer_with_provenance(data)
             raw = dict(self.decoder(outputs, self.runner.spec))
             raw["workspace_clear"] = frame.workspace_clear
             raw["object_pose_xyzrpy"] = frame.object_pose_xyzrpy
@@ -233,4 +249,4 @@ class NativeOpenVINOPerception:
                     return captured
             evidence = OpenVINOPerceptionProvider(FixedFrame(), lambda _: raw).observe(scenario)
             return replace(evidence, scene_hash=frame.scene_hash,
-                           metadata={**evidence.metadata, **self.runner.provenance()})
+                           metadata={**evidence.metadata, **provenance})

@@ -1,60 +1,73 @@
 # Gatekeeper: Pre-Execution Security for Physical AI
 
-This repository is the hackathon integration shell for Oak & Sparrow Systems Enterprise LLC's AI Infra Summit 2026 Intel Physical AI Challenge build. It demonstrates one narrow proposition: a model, agent, or robot may possess the technical capability to act without possessing authority to cause the proposed physical state transition.
+This is Oak & Sparrow Systems Enterprise LLC's AI Infra hackathon integration. A model may be capable of proposing a movement without having authority to cause it. The application keeps evidence, planning, authority and execution separate, with a decision receipt before dispatch and an outcome receipt after every attempted effect.
 
-The demo path is camera/sensor evidence -> perception -> VLA proposal -> Gatekeeper authority evaluation -> ALLOW / TRANSFORM / HOLD / DENY -> controlled actuator -> chained outcome receipt. The authority decision is made before dispatch and is bound to the exact evidence and exact proposed action used for that decision.
+## Current runnable paths
 
-## Gatekeeper IP boundary
+The default service runs synthetic perception, a scripted proposal generator, the local reference authority engine and a simulated actuator. It provides a lightweight dashboard and API without requiring OpenVINO, MuJoCo or robot hardware.
 
-This repository is an MIT-licensed integration and demonstration implementation. It does not contain Oak & Sparrow's proprietary Gatekeeper production/runtime source or proprietary policy corpus.
+The native simulation path uses actual MuJoCo dynamics in an independently authored three-axis Cartesian carrier scene. The native vision path adds rendered RGB frames and a real compiled OpenVINO IR graph before authority evaluation and controlled physics execution. Its included graph compares pixels against a reference image; it is not a trained anomaly model. Workspace and geometry context are explicitly labeled simulator ground truth. Neither path is an SO-101 or bimanual grasp-and-sort demonstration.
 
-Gatekeeper is consumed through the `AuthorityClient` / `GatekeeperClient` API boundary in `src/oasse_physical_ai/gatekeeper_client.py`. `GatekeeperClient` is an MIT-licensed HTTP adapter. The service it is intended to call in the live build is the proprietary Gatekeeper production implementation, which is not contained here.
+See [Phase 2 runtime](docs/PHASE2_RUNTIME.md), [Phase 3 native perception](docs/PHASE3_NATIVE_PERCEPTION.md), and [Jackson's perception handoff](docs/JACKSON_PERCEPTION.md) for exact boundaries and integration instructions.
 
-`ReferenceAuthorityEngine` in `src/oasse_physical_ai/policy.py` is a local, deterministic reference/simulation authority engine. It exists for local simulation, CI, judging rehearsals, and failure testing. It is MIT-licensed repository code. It is not the proprietary Gatekeeper production engine and is not represented as such.
+## Run the default demo
 
-In the live build, set `AUTHORITY_MODE=live` and `GATEKEEPER_URL` (and `GATEKEEPER_TOKEN` if required) to the governed endpoint, and the same orchestrator will call the production authority service through the same boundary. The default, `AUTHORITY_MODE=reference`, uses the local reference engine, and so does any value other than `live` (matched case-insensitively). The `policy_version` field on every decision identifies which engine produced it (`physical-ai-demo-v1` for the reference engine), and `GET /health` reports the effective `authority_mode`.
+From `oasse-ai-infra-hackathon`:
 
-See [`NOTICE.md`](NOTICE.md) for the full licensing and IP boundary statement.
-
-## Live-mode contract
-
-`GatekeeperClient` posts `{"evidence": ..., "action": ...}` to `GATEKEEPER_URL/v1/evaluate` and expects a JSON object with `decision_id`, `verdict` (`ALLOW`, `TRANSFORM`, `HOLD`, or `DENY`), and optionally `reason_codes`, `evaluated_at_ms`, `authority_latency_ms` (service-reported), `policy_version`, and `authorized_action`.
-
-The adapter fails closed:
-
-- `ALLOW` executes the proposal exactly as submitted. An `ALLOW` that also carries an `authorized_action` differing from the proposal in a physical field is a contradiction and becomes a `HOLD` with `AUTHORIZED_ACTION_CONFLICT`; an unusable or rebound `authorized_action` under `ALLOW` is held with `AUTHORIZED_ACTION_INVALID` or `AUTHORIZED_ACTION_BINDING_MISMATCH` just as under `TRANSFORM`.
-- `TRANSFORM` executes only the `authorized_action` returned by Gatekeeper, given as a full action object or just the changed fields, and only if it differs from the proposal in a physical field (`action_type`, `target_bin`, `speed_mps`, `object_id`, or `trajectory`). `metadata` and `requested_at_ms` are never taken from the service; the executed action keeps the proposal's values for both. It never falls back to the original proposal. A `TRANSFORM` with no authorized action, an unusable one (wrong field types, a boolean, negative, or non-finite speed, an empty or malformed trajectory), one that leaves the proposal physically unchanged, or one bound to a different `action_id`, `actor_id`, or `evidence_id` becomes a `HOLD`, with `AUTHORIZED_ACTION_MISSING`, `AUTHORIZED_ACTION_INVALID`, `AUTHORIZED_ACTION_UNCHANGED`, or `AUTHORIZED_ACTION_BINDING_MISMATCH` appended to the service's reason codes.
-- Transport errors, timeouts, TLS or proxy problems, and non-2xx statuses become a `HOLD` with `AUTHORITY_UNAVAILABLE` (plus `HTTP_<status>` when a status was received). Bodies that are not JSON, lack `decision_id` or `verdict`, or carry wrongly typed fields become a `HOLD` with `AUTHORITY_RESPONSE_INVALID`. A local evidence or action that cannot be serialized becomes a `HOLD` with `AUTHORITY_REQUEST_INVALID`. `evaluate()` never raises. These decisions carry `policy_version` `gatekeeper-live-unavailable`, record the local time elapsed until the failure as their authority latency (no service-reported value exists), are sealed into the receipt chain like any other decision, and never reach the actuator.
-
-The orchestrator applies the same physical-field rule at the last gate: a `TRANSFORM` whose authorized action is missing or does not physically differ from the proposal is not executed, whichever engine produced it.
-
-`GET /health` reports `authority_mode` (`reference`, `live`, or `custom` for an injected engine, derived from the engine actually wired in), `authority_engine` (its class name), and `authority_mode_setting` (the `AUTHORITY_MODE` value as read). A misconfigured value such as `prod` therefore shows as setting `prod` with effective mode `reference`.
-
-## Run locally
-
-```bash
-pip install -e ".[dev]"
-python -m pytest tests
+```sh
+python -m pip install -e ".[dev]"
+python -m pytest tests -q
 python scripts/run_demo.py
-uvicorn oasse_physical_ai.api:app --app-dir src --reload
+uvicorn oasse_physical_ai.api:app --app-dir src --host 127.0.0.1 --port 8000
 ```
 
-Open `http://127.0.0.1:8000/` for the demo console. The API exposes health, scenario execution (evaluation plus governed dispatch), direct evaluation, receipts, and latency metrics.
+Open `http://127.0.0.1:8000/`. Docker builds from this same application directory. The default Docker image intentionally omits the optional vision and simulation runtimes.
 
-## Demo thesis
+## Run native simulation and vision
 
-Intel and OpenVINO accelerate the perception and physical-AI execution path. Gatekeeper governs the final transition from proposed action to authorized effect. Performance matters, but speed alone is not the security property. The system must establish whether this actor, using this evidence, for this action, in this environment, at this time, may execute.
+```sh
+python -m pip install -e ".[dev,simulator,perception]"
+python scripts/run_mujoco_demo.py
+MUJOCO_GL=osmesa OASSE_NATIVE_CAMERA_TESTS=1 python -m pytest tests -q
+MUJOCO_GL=osmesa python scripts/run_native_vision_demo.py --output native-vision.json --artifacts-dir demo-output/native-vision
+```
 
-The default scenarios are deliberately simple. A fresh, high-confidence clear-workspace action is allowed. Stale evidence is held. Workspace occupancy is denied. A velocity above the configured authority ceiling is transformed into a bounded action. Identity mismatch is denied. An action bound to a different evidence identity is denied. Low-confidence evidence is held. A defective cube is routed to the reject bin and allowed. Every result receives a sealed decision receipt. Executed effects receive a second chained outcome receipt.
+Headless Ubuntu needs the `libosmesa6` system package for the vision example. Select the GL backend before importing MuJoCo. CPU inference and Linux OSMesa are exercised by CI. Other device and renderer configurations require their own verification. The native example saves exact rendered PPM images, exported reference IR fixtures and JSON receipts rather than presenting callbacks as executed native components.
 
-## Intel integration boundary
+## Authority and dispatch
 
-The provider interfaces isolate perception, VLA planning, and actuator control. The current mock providers are runnable without robot hardware. The integration files are prepared for OpenVINO/Physical AI Studio/Robotics AI Suite adapters so the authority semantics remain unchanged when the simulator is replaced by the on-site SO-101 arm and live camera.
+The intended path is `camera -> perception -> EvidenceFrame -> VLA proposal -> ProposedAction -> Gatekeeper -> authorized action -> actuator -> outcome receipt`.
 
-## Submission boundary
+`ALLOW` permits the unchanged proposal. `TRANSFORM` requires an explicitly authorized physical change, not a metadata-only or timestamp-only edit. `HOLD` and `DENY` never dispatch. The live adapter rejects missing or malformed authorized actions, identity rebinding, contradictory ALLOW payloads and nonfinite or wrongly typed values. Transport failures and malformed responses produce fail-closed decisions rather than allowing the action.
 
-This is a hackathon integration repository. It is not a production certification, safety certification, legal-compliance certification, or release of the proprietary Gatekeeper authority engine. The demo proves the architecture and records measurable behavior under declared scenarios.
+The local dispatcher may remove permission but cannot grant it. It snapshots evidence and proposals, validates returned authority decisions and gives the actuator its own isolated action copy. Evidence freshness is checked before dispatch and after receipt creation. A monotonic lease prevents an unchanged wall clock from extending an already-issued evidence deadline. Reused identities and non-increasing capture sequences are held. Identical pixels in a genuinely new capture are not automatically treated as replay. The native simulator additionally checks freshness and action binding before each physics step.
+
+The `dispatch_attempted` field records invocation of an actuator. `executed` requires an explicit success response, rather than merely a callback returning without raising. Unknown status or exceptions produce an unknown outcome, including possible partial effects. Every attempted dispatch gets an outcome receipt. A blocked command does not invoke the actuator. Receipt data is copied to strict finite JSON and chain appends are synchronized. A corrupted prior chain blocks new effects.
+
+These controls operate within one process with trusted integration components. They are not a sandbox against malicious code with direct access to a robot or simulator. Replay state and receipts remain in memory; restart persistence, source authentication, physical braking and hardware emergency stops are separate requirements.
+
+## API
+
+`GET /health` reports actual authority mode, engine and configured setting, component class names, version and receipt-chain validity. `POST /v1/evaluate` validates an evidence/action pair and seals an evaluation receipt without dispatching or consuming replay state. `POST /v1/demo/{scenario}` evaluates and conditionally dispatches a declared synthetic scenario. `GET /v1/receipts` and `GET /v1/metrics` expose the in-memory demonstration record. Invalid evidence or action fields receive a client error. A corrupted chain receives an unavailable response on evaluation or dispatch.
+
+The default scenarios cover fresh input, a marked object, stale evidence, occupied workspace, overspeed, unrecognized actor, mismatched evidence and low confidence. The native vision runner additionally exercises changed scenes, future timestamps, replay and authority unavailability. Its marked-object case chooses a reject destination in the proposal and executes a short diagnostic carrier movement, not a demonstrated physical grasp or sorting cycle.
+
+## Live Gatekeeper contract and IP boundary
+
+This repository and its local `ReferenceAuthorityEngine`, `AuthorityClient` and `GatekeeperClient` are MIT-licensed integration code. It does not contain the separate proprietary Gatekeeper production/runtime source or policy corpus. The local reference engine is not represented as production Gatekeeper.
+
+Set `AUTHORITY_MODE=live`, `GATEKEEPER_URL`, and `GATEKEEPER_TOKEN` when required to use the external authority service. The current factory matches `live` case-insensitively; any other setting selects the reference engine and `/health` exposes that setting and effective mode. Verify effective mode before a live demonstration. Native CI's outage transport is a declared test fixture, not proof of production connectivity.
+
+`GatekeeperClient` posts `{"evidence": ..., "action": ...}` to `GATEKEEPER_URL/v1/evaluate`. It requires a known `verdict` and a nonempty `decision_id`, with optional `reason_codes`, `evaluated_at_ms`, `authority_latency_ms`, `policy_version` and `authorized_action`. TRANSFORM requires a full action or explicit field changes. Only accepted physical and identity fields are applied; service metadata and requested timestamps do not replace the proposal's informational fields. Service-reported latency and local failure elapsed time are distinguished in the implementation documentation and must not be passed off as a whole-system benchmark.
+
+No source or assets from the external LeRobot tutorial are included. Its workflow informed the interface discussion only. See [NOTICE.md](NOTICE.md) for the licensing and proprietary-technology boundary.
+
+## Verification and submission scope
+
+CI tests the lightweight Python path, reference scenarios, Docker build and real HTTP startup. Separate jobs require native MuJoCo and native OpenVINO imports, execute their tests and smoke runners, and archive exact dependency versions and verification records. Optional-dependency skips in the lightweight job are not counted as native runtime proof; the native job runs the full stack.
+
+This is a hackathon integration repository, not a production, safety or legal-compliance certification. The included deterministic vision graph, scripted policy and Cartesian scene are declared fixtures. The next hardware integration replaces them with the selected camera, trained detector, trained VLA and event robot model while preserving the authority boundary.
 
 ## License
 
-MIT. See [`LICENSE`](LICENSE) (identical to the repository root [`LICENSE`](../LICENSE)) and [`NOTICE.md`](NOTICE.md). The MIT License covers the code and materials actually distributed in this repository. It does not cover OASSE's separate proprietary technology, which is not distributed here.
+MIT. See [LICENSE](LICENSE), identical to the repository root [LICENSE](../LICENSE), and [NOTICE.md](NOTICE.md). MIT covers the code and materials distributed here, not OASSE's separate undistributed proprietary technology.
