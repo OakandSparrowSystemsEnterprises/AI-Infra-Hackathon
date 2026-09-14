@@ -1,6 +1,7 @@
-"""Strict JSON receipt snapshots with serialized in-process chain appends."""
+"""Append-only receipt chain with isolated public snapshots and O(1) hot-path integrity checks."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 import hashlib
 import json
 import threading
@@ -12,60 +13,166 @@ from .models import Receipt
 from .normalization import plain, text
 
 
+def _canonical_plain(payload: Any) -> bytes:
+    """Encode an already-normalized JSON value without traversing it again."""
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+
+
 def canonical_json(payload: Dict[str, Any]) -> bytes:
-    return json.dumps(plain(payload), sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    """Canonicalize arbitrary bounded JSON-like input for portable verification."""
+    return _canonical_plain(plain(payload))
 
 
 def sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+@dataclass(frozen=True)
+class _StoredReceipt:
+    """Private immutable chain record. Payload bytes are never exposed by reference."""
+
+    receipt_id: str
+    receipt_type: str
+    created_at_ms: int
+    payload_hash: str
+    prev_hash: str
+    receipt_hash: str
+    payload_json: bytes
+
+
 class ReceiptChain:
+    """In-process append-only hash chain.
+
+    Public callers only receive materialized copies. That prevents a dashboard,
+    verifier, or caller from corrupting chain state through a mutable Receipt
+    payload. Full ``verify()`` remains available for exported evidence and
+    health checks. Dispatch uses ``assert_intact()`` which is O(1): internal
+    records are immutable and only the private append path can add them.
+
+    Hash chaining provides integrity, not source authentication or signatures.
+    """
+
     def __init__(self) -> None:
-        self._receipts: List[Receipt] = []
+        self._receipts: List[_StoredReceipt] = []
+        self._head = "GENESIS"
+        self._healthy = True
         self._lock = threading.RLock()
+
+    @staticmethod
+    def _envelope(record: _StoredReceipt) -> dict[str, Any]:
+        return {
+            "receipt_id": record.receipt_id,
+            "receipt_type": record.receipt_type,
+            "created_at_ms": record.created_at_ms,
+            "payload_hash": record.payload_hash,
+            "prev_hash": record.prev_hash,
+        }
+
+    @staticmethod
+    def _materialize(record: _StoredReceipt) -> Receipt:
+        payload = json.loads(record.payload_json.decode("utf-8"))
+        return Receipt(
+            receipt_id=record.receipt_id,
+            receipt_type=record.receipt_type,
+            created_at_ms=record.created_at_ms,
+            payload_hash=record.payload_hash,
+            prev_hash=record.prev_hash,
+            receipt_hash=record.receipt_hash,
+            payload=payload,
+        )
+
+    def _tail_valid_locked(self) -> bool:
+        if not self._healthy:
+            return False
+        if not self._receipts:
+            return self._head == "GENESIS"
+        record = self._receipts[-1]
+        if self._head != record.receipt_hash:
+            return False
+        if sha256_hex(record.payload_json) != record.payload_hash:
+            return False
+        return sha256_hex(_canonical_plain(self._envelope(record))) == record.receipt_hash
 
     @property
     def head(self) -> str:
         with self._lock:
-            return self._receipts[-1].receipt_hash if self._receipts else "GENESIS"
+            return self._head
+
+    def assert_intact(self) -> bool:
+        """Constant-time integrity gate for the execution hot path."""
+        with self._lock:
+            if not self._tail_valid_locked():
+                self._healthy = False
+            return self._healthy
 
     def seal(self, receipt_type: str, payload: Dict[str, Any]) -> Receipt:
         text(receipt_type, "receipt_type")
         if not isinstance(payload, dict):
             raise TypeError("receipt payload must be an object")
         snapshot = plain(payload)
-        encoded = canonical_json(snapshot)
+        payload_json = _canonical_plain(snapshot)
+        payload_hash = sha256_hex(payload_json)
         with self._lock:
+            if not self._tail_valid_locked():
+                self._healthy = False
+                raise RuntimeError("RECEIPT_CHAIN_INVALID")
             created = int(time.time() * 1000)
-            payload_hash = sha256_hex(encoded)
-            prev_hash = self.head
-            envelope = {"receipt_type": receipt_type, "created_at_ms": created,
-                        "payload_hash": payload_hash, "prev_hash": prev_hash}
-            receipt = Receipt(receipt_id=f"rcpt-{uuid.uuid4().hex[:12]}", receipt_type=receipt_type,
-                              created_at_ms=created, payload_hash=payload_hash, prev_hash=prev_hash,
-                              receipt_hash=sha256_hex(canonical_json(envelope)), payload=snapshot)
-            self._receipts.append(receipt)
-            return receipt
+            receipt_id = f"rcpt-{uuid.uuid4().hex[:12]}"
+            record = _StoredReceipt(
+                receipt_id=receipt_id,
+                receipt_type=receipt_type,
+                created_at_ms=created,
+                payload_hash=payload_hash,
+                prev_hash=self._head,
+                receipt_hash="",
+                payload_json=payload_json,
+            )
+            receipt_hash = sha256_hex(_canonical_plain(self._envelope(record)))
+            record = _StoredReceipt(
+                receipt_id=record.receipt_id,
+                receipt_type=record.receipt_type,
+                created_at_ms=record.created_at_ms,
+                payload_hash=record.payload_hash,
+                prev_hash=record.prev_hash,
+                receipt_hash=receipt_hash,
+                payload_json=record.payload_json,
+            )
+            self._receipts.append(record)
+            self._head = receipt_hash
+            return self._materialize(record)
 
     def all(self) -> List[Receipt]:
+        """Return detached receipt copies; callers cannot mutate internal chain state."""
         with self._lock:
-            return list(self._receipts)
+            return [self._materialize(record) for record in self._receipts]
 
     def verify(self) -> bool:
+        """Full O(n) verification for health checks, export and evidence review."""
         with self._lock:
+            if not self._healthy:
+                return False
             try:
-                prev = "GENESIS"
-                for receipt in self._receipts:
-                    if receipt.prev_hash != prev:
+                previous = "GENESIS"
+                for record in self._receipts:
+                    if record.prev_hash != previous:
+                        self._healthy = False
                         return False
-                    if sha256_hex(canonical_json(receipt.payload)) != receipt.payload_hash:
+                    if sha256_hex(record.payload_json) != record.payload_hash:
+                        self._healthy = False
                         return False
-                    envelope = {"receipt_type": receipt.receipt_type, "created_at_ms": receipt.created_at_ms,
-                                "payload_hash": receipt.payload_hash, "prev_hash": receipt.prev_hash}
-                    if sha256_hex(canonical_json(envelope)) != receipt.receipt_hash:
+                    if sha256_hex(_canonical_plain(self._envelope(record))) != record.receipt_hash:
+                        self._healthy = False
                         return False
-                    prev = receipt.receipt_hash
+                    # Ensure a privately corrupted payload is still valid strict JSON.
+                    parsed = json.loads(record.payload_json.decode("utf-8"))
+                    if not isinstance(parsed, dict):
+                        self._healthy = False
+                        return False
+                    previous = record.receipt_hash
+                if previous != self._head:
+                    self._healthy = False
+                    return False
                 return True
-            except (TypeError, ValueError, OverflowError, RecursionError):
+            except (TypeError, ValueError, OverflowError, RecursionError, UnicodeError, json.JSONDecodeError):
+                self._healthy = False
                 return False

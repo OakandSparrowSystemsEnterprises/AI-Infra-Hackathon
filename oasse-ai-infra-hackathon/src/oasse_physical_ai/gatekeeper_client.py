@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Protocol, Tuple
 
 import httpx
 
+from .dispatch import snapshot_fields
 from .models import PHYSICAL_ACTION_FIELDS, AuthorityDecision, EvidenceFrame, ProposedAction, Verdict, physically_changed
 from .policy import ReferenceAuthorityEngine
 
@@ -20,25 +21,19 @@ class AuthorityClient(Protocol):
     def evaluate(self, evidence: EvidenceFrame, action: ProposedAction) -> AuthorityDecision: ...
 
 
-# Reason codes GatekeeperClient adds itself when it cannot turn the live
-# service's answer into an executable decision. Each of them yields a HOLD.
-AUTHORITY_REQUEST_INVALID = "AUTHORITY_REQUEST_INVALID"  # the local evidence/action could not be serialized
-AUTHORITY_UNAVAILABLE = "AUTHORITY_UNAVAILABLE"  # transport error, timeout, or non-2xx status
-AUTHORITY_RESPONSE_INVALID = "AUTHORITY_RESPONSE_INVALID"  # body is not JSON or has missing/invalid fields
-AUTHORIZED_ACTION_MISSING = "AUTHORIZED_ACTION_MISSING"  # TRANSFORM without an authorized_action
-AUTHORIZED_ACTION_INVALID = "AUTHORIZED_ACTION_INVALID"  # authorized_action is not a usable action
-AUTHORIZED_ACTION_UNCHANGED = "AUTHORIZED_ACTION_UNCHANGED"  # TRANSFORM that hands back the proposal
-AUTHORIZED_ACTION_BINDING_MISMATCH = "AUTHORIZED_ACTION_BINDING_MISMATCH"  # identity fields differ
-AUTHORIZED_ACTION_CONFLICT = "AUTHORIZED_ACTION_CONFLICT"  # ALLOW that carries a different action
+AUTHORITY_REQUEST_INVALID = "AUTHORITY_REQUEST_INVALID"
+AUTHORITY_UNAVAILABLE = "AUTHORITY_UNAVAILABLE"
+AUTHORITY_RESPONSE_INVALID = "AUTHORITY_RESPONSE_INVALID"
+AUTHORIZED_ACTION_MISSING = "AUTHORIZED_ACTION_MISSING"
+AUTHORIZED_ACTION_INVALID = "AUTHORIZED_ACTION_INVALID"
+AUTHORIZED_ACTION_UNCHANGED = "AUTHORIZED_ACTION_UNCHANGED"
+AUTHORIZED_ACTION_BINDING_MISMATCH = "AUTHORIZED_ACTION_BINDING_MISMATCH"
+AUTHORIZED_ACTION_CONFLICT = "AUTHORIZED_ACTION_CONFLICT"
 
 LIVE_POLICY_VERSION_DEFAULT = "gatekeeper-live"
 LIVE_UNAVAILABLE_POLICY_VERSION = "gatekeeper-live-unavailable"
 
 _BOUND_FIELDS = ("action_id", "actor_id", "evidence_id")
-# The only authorized_action fields the adapter applies: the physical fields
-# and the identity fields (accepted solely so rebinding can be detected).
-# metadata and requested_at_ms are informational, are never taken from the
-# service, and keep the proposal's values.
 _ACCEPTED_FIELDS = frozenset(PHYSICAL_ACTION_FIELDS) | frozenset(_BOUND_FIELDS)
 assert _ACCEPTED_FIELDS <= {f.name for f in fields(ProposedAction)}
 
@@ -48,7 +43,7 @@ def _is_number(value: Any) -> bool:
         return False
     try:
         return math.isfinite(value)
-    except OverflowError:  # an int too large for a float
+    except OverflowError:
         return False
 
 
@@ -57,7 +52,6 @@ def _is_text(value: Any) -> bool:
 
 
 def _valid_override(name: str, value: Any) -> bool:
-    """Type-check one ProposedAction field supplied by the service."""
     if name in ("action_id", "actor_id", "evidence_id", "action_type", "target_bin", "object_id"):
         return _is_text(value)
     if name == "speed_mps":
@@ -65,20 +59,14 @@ def _valid_override(name: str, value: Any) -> bool:
     if name == "trajectory":
         return (
             isinstance(value, list)
-            and len(value) > 0
-            and all(isinstance(point, list) and len(point) > 0 and all(_is_number(c) for c in point) for point in value)
+            and 1 <= len(value) <= 256
+            and all(isinstance(point, list) and len(point) == 3
+                    and all(_is_number(c) for c in point) for point in value)
         )
     return False
 
 
 def _merge_authorized(original: ProposedAction, raw: Any) -> Tuple[Optional[ProposedAction], Optional[str], bool]:
-    """Apply the service's authorized_action payload to the proposal.
-
-    `raw` may be a full action object or only the changed fields. Returns
-    (candidate, problem, changed). `problem` is a reason code when the payload
-    is unusable or rebinds the action to another identity; `changed` says
-    whether the candidate differs from the proposal in a physical field.
-    """
     if not isinstance(raw, dict):
         return None, AUTHORIZED_ACTION_INVALID, False
     overrides = {key: value for key, value in raw.items() if key in _ACCEPTED_FIELDS}
@@ -93,27 +81,25 @@ def _merge_authorized(original: ProposedAction, raw: Any) -> Tuple[Optional[Prop
 
 
 def _parse_response(data: Any) -> Dict[str, Any]:
-    """Validate the service body. Raises ValueError on any shape or type problem."""
     if not isinstance(data, dict):
         raise ValueError("response body must be a JSON object")
     verdict_raw = data.get("verdict")
     if not isinstance(verdict_raw, str):
         raise ValueError("verdict must be a string")
-    verdict = Verdict(verdict_raw)  # ValueError for unknown verdicts
+    verdict = Verdict(verdict_raw)
     decision_id = data.get("decision_id")
     if not _is_text(decision_id):
         raise ValueError("decision_id must be a non-empty string")
-    # Optional fields: an explicit null is treated like an absent field.
     reasons = data.get("reason_codes")
     if reasons is None:
         reasons = []
-    if not isinstance(reasons, list) or not all(isinstance(code, str) for code in reasons):
-        raise ValueError("reason_codes must be a list of strings")
+    if not isinstance(reasons, list) or not all(_is_text(code) for code in reasons):
+        raise ValueError("reason_codes must be a list of non-empty strings")
     evaluated_at = data.get("evaluated_at_ms")
     if evaluated_at is None:
         evaluated_at = int(time.time() * 1000)
-    if not _is_number(evaluated_at) or evaluated_at < 0:
-        raise ValueError("evaluated_at_ms must be a non-negative number")
+    if type(evaluated_at) is not int or evaluated_at < 0:
+        raise ValueError("evaluated_at_ms must be a non-negative integer")
     latency = data.get("authority_latency_ms")
     if latency is None:
         latency = 0.0
@@ -128,7 +114,7 @@ def _parse_response(data: Any) -> Dict[str, Any]:
         "verdict": verdict,
         "decision_id": decision_id,
         "reason_codes": list(reasons),
-        "evaluated_at_ms": int(evaluated_at),
+        "evaluated_at_ms": evaluated_at,
         "authority_latency_ms": float(latency),
         "policy_version": policy_version,
         "authorized_action": data.get("authorized_action"),
@@ -136,84 +122,78 @@ def _parse_response(data: Any) -> Dict[str, Any]:
 
 
 class GatekeeperClient:
-    """HTTP adapter for the Gatekeeper authority endpoint.
+    """Pooled, fail-closed HTTP adapter for the Gatekeeper authority endpoint.
 
-    This adapter is MIT-licensed repository code. The Gatekeeper production
-    service it calls (AUTHORITY_MODE=live with GATEKEEPER_URL) is proprietary
-    and is not contained in this repository. See NOTICE.md.
-
-    Expected response from POST {base_url}/v1/evaluate:
-
-        {
-          "decision_id": str,                  non-empty
-          "verdict": "ALLOW" | "TRANSFORM" | "HOLD" | "DENY",
-          "reason_codes": [str, ...],          optional
-          "evaluated_at_ms": int,              optional
-          "authority_latency_ms": float,       optional, service-reported
-          "policy_version": str,               optional
-          "authorized_action": {...}           required for TRANSFORM; full
-                                               ProposedAction or changed fields
-        }
-
-    The adapter fails closed and never raises from evaluate(). Serialization
-    problems, transport errors, timeouts, non-2xx statuses, and malformed
-    bodies become HOLD decisions carrying a reason code, so the orchestrator
-    still seals a decision receipt and the actuator is never reached. A
-    TRANSFORM verdict executes only the authorized action returned by the
-    service, and only if it differs from the proposal in a physical field;
-    it never falls back to the original proposal. An ALLOW that carries a
-    different authorized action is a conflict and is held.
+    The adapter keeps one ``httpx.Client`` for the lifetime of the authority
+    client so live evaluations reuse TCP/TLS connections instead of paying a
+    fresh connection setup on every robot decision. ``close()`` is explicit
+    and idempotent. The production service remains outside this MIT repository.
     """
 
-    def __init__(
-        self,
-        base_url: str,
-        token: str = "",
-        timeout_s: float = 2.0,
-        transport: Optional[httpx.BaseTransport] = None,
-    ) -> None:
-        if not base_url:
+    def __init__(self, base_url: str, token: str = "", timeout_s: float = 2.0,
+                 transport: Optional[httpx.BaseTransport] = None) -> None:
+        if not isinstance(base_url, str) or not base_url.strip():
             raise ValueError("Gatekeeper base URL is required")
+        if not isinstance(token, str):
+            raise TypeError("Gatekeeper token must be a string")
+        if not _is_number(timeout_s) or not 0 < float(timeout_s) <= 30:
+            raise ValueError("Gatekeeper timeout must be in (0, 30] seconds")
         self.base_url = base_url.rstrip("/")
         self.token = token
-        self.timeout_s = timeout_s
+        self.timeout_s = float(timeout_s)
         self._transport = transport
+        headers = {"Content-Type": "application/json"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        self._client = httpx.Client(
+            timeout=self.timeout_s,
+            transport=transport,
+            headers=headers,
+            limits=httpx.Limits(max_connections=8, max_keepalive_connections=4, keepalive_expiry=30.0),
+        )
+
+    def close(self) -> None:
+        if not self._client.is_closed:
+            self._client.close()
+
+    def __enter__(self) -> "GatekeeperClient":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
 
     def evaluate(self, evidence: EvidenceFrame, action: ProposedAction) -> AuthorityDecision:
         start = time.perf_counter_ns()
-        headers = {"Content-Type": "application/json"}
-        if self.token:
-            headers["Authorization"] = f"Bearer {self.token}"
-
-        # Stage 1: serialize the request locally.
         try:
-            body = json.dumps({"evidence": evidence.__dict__, "action": action.__dict__}, allow_nan=False).encode("utf-8")
-        except Exception as exc:  # noqa: BLE001 - fail closed on anything
-            log.warning("Gatekeeper request for action %s could not be serialized (%s); holding", action.action_id, type(exc).__name__)
+            body = json.dumps(
+                {"evidence": snapshot_fields(evidence), "action": snapshot_fields(action)},
+                separators=(",", ":"), allow_nan=False,
+            ).encode("utf-8")
+        except Exception as exc:
+            log.warning("Gatekeeper request for action %s could not be serialized (%s); holding",
+                        action.action_id, type(exc).__name__)
             return self._hold(evidence, action, [AUTHORITY_REQUEST_INVALID], start)
 
-        # Stage 2: reach the service.
         try:
-            with httpx.Client(timeout=self.timeout_s, transport=self._transport) as client:
-                response = client.post(f"{self.base_url}/v1/evaluate", content=body, headers=headers)
-                response.raise_for_status()
+            response = self._client.post(f"{self.base_url}/v1/evaluate", content=body)
+            response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             status = exc.response.status_code
             log.warning("Gatekeeper returned HTTP %s for action %s; holding", status, action.action_id)
             return self._hold(evidence, action, [AUTHORITY_UNAVAILABLE, f"HTTP_{status}"], start)
-        except Exception as exc:  # noqa: BLE001 - transport, TLS, proxy, or client construction failure
+        except Exception as exc:
             log.warning("Gatekeeper unreachable (%s) for action %s; holding", type(exc).__name__, action.action_id)
             return self._hold(evidence, action, [AUTHORITY_UNAVAILABLE], start)
 
-        # Stage 3: interpret the answer.
         try:
             parsed = _parse_response(response.json())
             return self._decision_from(parsed, evidence, action, start)
-        except Exception as exc:  # noqa: BLE001 - not JSON, wrong shape, wrong types, pathological values
+        except Exception as exc:
             log.warning("Gatekeeper response malformed (%s) for action %s; holding", type(exc).__name__, action.action_id)
             return self._hold(evidence, action, [AUTHORITY_RESPONSE_INVALID], start)
 
-    def _decision_from(self, parsed: Dict[str, Any], evidence: EvidenceFrame, action: ProposedAction, start: int) -> AuthorityDecision:
+    def _decision_from(self, parsed: Dict[str, Any], evidence: EvidenceFrame,
+                       action: ProposedAction, start: int) -> AuthorityDecision:
         verdict: Verdict = parsed["verdict"]
         reasons: List[str] = parsed["reason_codes"]
         raw_authorized = parsed["authorized_action"]
@@ -235,53 +215,30 @@ class GatekeeperClient:
                     problem = AUTHORIZED_ACTION_UNCHANGED
 
         if problem is not None:
-            log.warning("Gatekeeper %s for action %s is not executable (%s); holding", verdict.value, action.action_id, problem)
+            log.warning("Gatekeeper %s for action %s is not executable (%s); holding",
+                        verdict.value, action.action_id, problem)
             return self._hold(
-                evidence,
-                action,
-                reasons + [problem],
-                start,
-                decision_id=parsed["decision_id"],
-                evaluated_at_ms=parsed["evaluated_at_ms"],
-                latency=parsed["authority_latency_ms"],
-                policy_version=parsed["policy_version"],
+                evidence, action, reasons + [problem], start,
+                decision_id=parsed["decision_id"], evaluated_at_ms=parsed["evaluated_at_ms"],
+                latency=parsed["authority_latency_ms"], policy_version=parsed["policy_version"],
             )
         return AuthorityDecision(
-            decision_id=parsed["decision_id"],
-            verdict=verdict,
-            reason_codes=reasons,
+            decision_id=parsed["decision_id"], verdict=verdict, reason_codes=reasons,
             original_action=action,
             authorized_action=authorized if verdict in {Verdict.ALLOW, Verdict.TRANSFORM} else None,
-            evidence=evidence,
-            evaluated_at_ms=parsed["evaluated_at_ms"],
-            authority_latency_ms=parsed["authority_latency_ms"],
-            policy_version=parsed["policy_version"],
+            evidence=evidence, evaluated_at_ms=parsed["evaluated_at_ms"],
+            authority_latency_ms=parsed["authority_latency_ms"], policy_version=parsed["policy_version"],
         )
 
     @staticmethod
-    def _hold(
-        evidence: EvidenceFrame,
-        action: ProposedAction,
-        reasons: List[str],
-        start: int,
-        *,
-        decision_id: Optional[str] = None,
-        evaluated_at_ms: Optional[int] = None,
-        latency: Optional[float] = None,
-        policy_version: str = LIVE_UNAVAILABLE_POLICY_VERSION,
-    ) -> AuthorityDecision:
-        """Fail-closed decision: nothing is authorized, and the receipt records why.
-
-        When no service-reported latency exists, the local time elapsed until
-        the failure is recorded instead.
-        """
+    def _hold(evidence: EvidenceFrame, action: ProposedAction, reasons: List[str], start: int,
+              *, decision_id: Optional[str] = None, evaluated_at_ms: Optional[int] = None,
+              latency: Optional[float] = None,
+              policy_version: str = LIVE_UNAVAILABLE_POLICY_VERSION) -> AuthorityDecision:
         elapsed = (time.perf_counter_ns() - start) / 1_000_000.0
         return AuthorityDecision(
-            decision_id=decision_id or f"dec-{action.action_id}",
-            verdict=Verdict.HOLD,
-            reason_codes=list(reasons),
-            original_action=action,
-            authorized_action=None,
+            decision_id=decision_id or f"dec-{action.action_id}", verdict=Verdict.HOLD,
+            reason_codes=list(reasons), original_action=action, authorized_action=None,
             evidence=evidence,
             evaluated_at_ms=evaluated_at_ms if evaluated_at_ms is not None else int(time.time() * 1000),
             authority_latency_ms=latency if latency is not None else elapsed,
@@ -290,12 +247,10 @@ class GatekeeperClient:
 
 
 def configured_authority_mode() -> str:
-    """The AUTHORITY_MODE setting as the code interprets it (trimmed, lowercased)."""
     return os.getenv("AUTHORITY_MODE", "reference").strip().lower()
 
 
 def describe_authority(authority: AuthorityClient) -> Dict[str, str]:
-    """Report which authority engine is actually wired in, for /health and judges."""
     if isinstance(authority, GatekeeperClient):
         mode = "live"
     elif isinstance(authority, ReferenceAuthorityEngine):

@@ -7,7 +7,7 @@ import threading
 import time
 from typing import Optional
 
-from .dispatch import DispatchGuard, fingerprint, validate_inputs, copy_action, copy_evidence, copy_decision
+from .dispatch import DispatchGuard, validate_inputs, copy_action, copy_evidence, copy_decision
 from .gatekeeper_client import AuthorityClient, build_authority_client
 from .metrics import Metrics
 from .models import AuthorityDecision, DispatchResult, EvidenceFrame, ProposedAction, Verdict, physically_changed
@@ -51,11 +51,17 @@ class PhysicalAIOrchestrator:
         self.metrics = Metrics()
         self._lock = threading.RLock()
 
+    def close(self) -> None:
+        close = getattr(self.authority, "close", None)
+        if callable(close):
+            close()
+
     def _check_chain(self) -> None:
-        if not self.receipts.verify():
+        if not self.receipts.assert_intact():
             raise ReceiptIntegrityError("RECEIPT_CHAIN_INVALID")
 
     def run(self, scenario: str = "allow") -> DispatchResult:
+        # Physical effects sharing one actuator/orchestrator are deliberately serialized.
         with self._lock:
             self._check_chain()
             return self._run(scenario)
@@ -82,17 +88,19 @@ class PhysicalAIOrchestrator:
                               {"status": "NOT_EXECUTED", "reason": reason}, None, elapsed, False)
 
     def _evaluate_checked(self, evidence: EvidenceFrame, action: ProposedAction) -> AuthorityDecision:
-        # Keep independent safe originals for a local failure record.
+        # Keep canonical local snapshots and hand independent copies across the
+        # authority boundary. Direct structural equality is sufficient after
+        # validation and is materially cheaper than repeated JSON+SHA passes.
         safe_evidence, safe_action = copy_evidence(evidence), copy_action(action)
-        evidence_hash, action_hash = fingerprint(evidence), fingerprint(action)
+        authority_evidence, authority_action = copy_evidence(safe_evidence), copy_action(safe_action)
         try:
-            received = self.authority.evaluate(evidence, action)
-            if fingerprint(evidence) != evidence_hash or fingerprint(action) != action_hash:
+            received = self.authority.evaluate(authority_evidence, authority_action)
+            if authority_evidence != safe_evidence or authority_action != safe_action:
                 return self._local_hold(safe_evidence, safe_action, "AUTHORITY_INPUT_MUTATED")
             decision = copy_decision(received)
-            if fingerprint(decision.evidence) != evidence_hash or fingerprint(decision.original_action) != action_hash:
+            if decision.evidence != safe_evidence or decision.original_action != safe_action:
                 return self._local_hold(safe_evidence, safe_action, "AUTHORITY_BINDING_CHANGED")
-            if action.evidence_id != evidence.evidence_id and decision.verdict in {Verdict.ALLOW, Verdict.TRANSFORM}:
+            if safe_action.evidence_id != safe_evidence.evidence_id and decision.verdict in {Verdict.ALLOW, Verdict.TRANSFORM}:
                 return self._held(decision, "EVIDENCE_BINDING_MISMATCH")
             return decision
         except Exception:
@@ -110,26 +118,31 @@ class PhysicalAIOrchestrator:
                                 (time.perf_counter_ns() - start) / 1e6)
             return decision
 
-    def _guard_reason(self, evidence: EvidenceFrame, action: ProposedAction, deadline: int, *, reserve=False) -> str | None:
+    def _guard_reason(self, evidence: EvidenceFrame, action: ProposedAction, deadline: int,
+                      *, reserve: bool = False) -> str | None:
         try:
             if reserve:
                 return self.dispatch_guard.reserve(evidence, action, deadline)
-            return self.dispatch_guard.freshness(evidence, deadline) or self.dispatch_guard.check(evidence, action)
+            return self.dispatch_guard.check(evidence, action, deadline)
         except Exception:
             return "DISPATCH_CHECK_FAILED"
 
     def _invoke(self, decision: AuthorityDecision, deadline: int) -> tuple[bool, dict]:
-        # The actuator never receives the same mutable object stored in the decision.
+        # The actuator never receives the same mutable nested structures stored
+        # in the decision. Equality against a detached baseline detects mutation
+        # without canonical JSON/SHA work on every native physics step.
         sent = copy_action(decision.authorized_action)
-        expected = fingerprint(sent)
+        expected = copy_action(sent)
         evidence = copy_evidence(decision.evidence)
-        def check_step():
+
+        def check_step() -> str | None:
             try:
-                if fingerprint(sent) != expected:
+                if sent != expected:
                     return "AUTHORIZED_ACTION_CHANGED"
                 return self.dispatch_guard.freshness(evidence, deadline)
             except Exception:
                 return "DISPATCH_CHECK_FAILED"
+
         try:
             guarded = getattr(self.actuator, "execute_guarded", None)
             raw = guarded(sent, check_step) if callable(guarded) else self.actuator.execute(sent)
@@ -142,7 +155,7 @@ class PhysicalAIOrchestrator:
             result["status"] = status
             if result.get("action_id", sent.action_id) != sent.action_id:
                 result = {"status": "UNKNOWN", "reason": "ACTUATOR_RESULT_BINDING_MISMATCH"}
-            elif fingerprint(sent) != expected and status == "EXECUTED":
+            elif sent != expected and status == "EXECUTED":
                 result = {"status": "UNKNOWN", "reason": "AUTHORIZED_ACTION_CHANGED"}
             return result["status"] == "EXECUTED", result
         except Exception as exc:
@@ -154,13 +167,13 @@ class PhysicalAIOrchestrator:
             observed = self.perception.observe(scenario)
             validate_inputs(observed)
             evidence = copy_evidence(observed)
-            evidence_hash = fingerprint(evidence)
             deadline = self.dispatch_guard.deadline(evidence)
         except Exception:
             return self._failure("PERCEPTION_INVALID", start)
         try:
-            proposed = self.vla.propose(evidence, scenario)
-            if fingerprint(evidence) != evidence_hash:
+            planner_evidence = copy_evidence(evidence)
+            proposed = self.vla.propose(planner_evidence, scenario)
+            if planner_evidence != evidence:
                 return self._failure("EVIDENCE_CHANGED_BY_PLANNER", start)
             validate_inputs(evidence, proposed)
             action = copy_action(proposed)

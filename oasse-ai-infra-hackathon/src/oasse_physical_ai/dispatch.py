@@ -19,6 +19,7 @@ def snapshot_fields(value: EvidenceFrame | ProposedAction) -> dict:
 
 
 def fingerprint(value: EvidenceFrame | ProposedAction) -> str:
+    """Portable content fingerprint used for evidence/export boundaries, not hot-path equality."""
     encoded = json.dumps(snapshot_fields(value), sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     return hashlib.sha256(encoded).hexdigest()
 
@@ -128,12 +129,14 @@ class DispatchGuard:
             return "EVIDENCE_LEASE_EXPIRED"
         return None
 
-    def check(self, evidence: EvidenceFrame, action: ProposedAction) -> str | None:
+    def check(self, evidence: EvidenceFrame, action: ProposedAction,
+              deadline_ns: int | None = None) -> str | None:
         with self._lock:
-            return self._check(evidence, action)
+            return self._check(evidence, action, deadline_ns)
 
-    def _check(self, evidence: EvidenceFrame, action: ProposedAction) -> str | None:
-        reason = self.freshness(evidence)
+    def _check(self, evidence: EvidenceFrame, action: ProposedAction,
+               deadline_ns: int | None = None) -> str | None:
+        reason = self.freshness(evidence, deadline_ns)
         if reason:
             return reason
         if ("evidence", evidence.evidence_id) in self._seen or ("action", action.action_id) in self._seen:
@@ -156,7 +159,7 @@ class DispatchGuard:
 
     def reserve(self, evidence: EvidenceFrame, action: ProposedAction, deadline_ns: int | None = None) -> str | None:
         with self._lock:
-            reason = self.freshness(evidence, deadline_ns) or self._check(evidence, action)
+            reason = self._check(evidence, action, deadline_ns)
             if reason is None:
                 self._consume(evidence, action)
             return reason

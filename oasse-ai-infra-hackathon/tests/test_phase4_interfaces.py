@@ -279,15 +279,15 @@ def test_interrupted_receipt_cannot_retry_a_task():
     assert actuator.calls==1
 
 
-def test_verifier_cannot_corrupt_chain_and_still_complete():
-    from oasse_physical_ai.orchestrator import ReceiptIntegrityError
+def test_verifier_cannot_corrupt_internal_chain_via_public_receipts():
     orch=PhysicalAIOrchestrator()
     def tamper(action):
         orch.receipts.all()[0].payload['bad']=True
         return observation(action)
     task=InspectionTask(orch,tamper)
-    with pytest.raises(ReceiptIntegrityError): task.run()
-    with pytest.raises(RuntimeError,match='NO_AUTOMATIC_RETRY'): task.run()
+    result=task.run()
+    assert result['task_complete'] and result['status']=='COMPLETE'
+    assert orch.receipts.verify()
 
 
 def test_forged_empty_or_loopback_probe_cannot_establish_live_readiness():

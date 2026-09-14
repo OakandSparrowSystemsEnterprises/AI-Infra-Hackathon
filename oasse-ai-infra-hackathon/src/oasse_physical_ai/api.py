@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
@@ -12,8 +13,18 @@ from .models import EvidenceFrame, ProposedAction
 from .orchestrator import PhysicalAIOrchestrator, ReceiptIntegrityError
 from .dashboard import dashboard_html
 
-app = FastAPI(title="OASSE Physical AI Authority Demo", version=__version__)
 orchestrator = PhysicalAIOrchestrator()
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    try:
+        yield
+    finally:
+        orchestrator.close()
+
+
+app = FastAPI(title="OASSE Physical AI Authority Demo", version=__version__, lifespan=lifespan)
 
 
 class EvaluateRequest(BaseModel):
