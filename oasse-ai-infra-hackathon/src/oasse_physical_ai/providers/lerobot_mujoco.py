@@ -53,7 +53,7 @@ def _trajectory(value: Any) -> list[list[float]]:
 class LeRobotVLAProvider:
     """Turn a LeRobot/VLA policy result into a proposal, never an authorization."""
 
-    def __init__(self, policy: PolicyFn, *, actor_id: str = "lerobot-vla-1", model_name: str = "lerobot") -> None:
+    def __init__(self, policy: PolicyFn, *, actor_id: str = "vla-planner-1", model_name: str = "lerobot") -> None:
         self.policy = policy
         self.actor_id = _text(actor_id, "actor_id")
         self.model_name = _text(model_name, "model_name")
