@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections import deque
 from statistics import median
-from typing import Dict, List
+from typing import Dict, Sequence
 
 
-def percentile(values: List[float], p: float) -> float:
+def percentile(values: Sequence[float], p: float) -> float:
     if not values:
         return 0.0
     xs = sorted(values)
@@ -18,20 +18,27 @@ def percentile(values: List[float], p: float) -> float:
     return xs[lo] * (1 - frac) + xs[hi] * frac
 
 
-@dataclass
 class Metrics:
-    authority_latencies_ms: List[float] = field(default_factory=list)
-    total_latencies_ms: List[float] = field(default_factory=list)
-    verdict_counts: Dict[str, int] = field(default_factory=dict)
+    """Bounded latency window plus lifetime verdict/run counters."""
+
+    def __init__(self, max_samples: int = 4096) -> None:
+        if type(max_samples) is not int or not 16 <= max_samples <= 100000:
+            raise ValueError("max_samples must be in [16, 100000]")
+        self.authority_latencies_ms = deque(maxlen=max_samples)
+        self.total_latencies_ms = deque(maxlen=max_samples)
+        self.verdict_counts: Dict[str, int] = {}
+        self.total_runs = 0
 
     def record(self, verdict: str, authority_ms: float, total_ms: float) -> None:
         self.authority_latencies_ms.append(authority_ms)
         self.total_latencies_ms.append(total_ms)
         self.verdict_counts[verdict] = self.verdict_counts.get(verdict, 0) + 1
+        self.total_runs += 1
 
     def snapshot(self) -> Dict[str, object]:
         return {
-            "runs": len(self.total_latencies_ms),
+            "runs": self.total_runs,
+            "latency_samples": len(self.total_latencies_ms),
             "verdict_counts": dict(self.verdict_counts),
             "authority_p50_ms": percentile(self.authority_latencies_ms, 0.50),
             "authority_p95_ms": percentile(self.authority_latencies_ms, 0.95),

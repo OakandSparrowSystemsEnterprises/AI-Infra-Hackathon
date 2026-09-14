@@ -61,7 +61,6 @@ class PhysicalAIOrchestrator:
             raise ReceiptIntegrityError("RECEIPT_CHAIN_INVALID")
 
     def run(self, scenario: str = "allow") -> DispatchResult:
-        # Physical effects sharing one actuator/orchestrator are deliberately serialized.
         with self._lock:
             self._check_chain()
             return self._run(scenario)
@@ -88,9 +87,6 @@ class PhysicalAIOrchestrator:
                               {"status": "NOT_EXECUTED", "reason": reason}, None, elapsed, False)
 
     def _evaluate_checked(self, evidence: EvidenceFrame, action: ProposedAction) -> AuthorityDecision:
-        # ``evidence`` and ``action`` are already private validated snapshots.
-        # Only the authority-facing copies cross the trust boundary. That keeps
-        # the local baseline isolated while avoiding two redundant deep copies.
         safe_evidence, safe_action = evidence, action
         authority_evidence, authority_action = copy_evidence(safe_evidence), copy_action(safe_action)
         try:
@@ -107,13 +103,10 @@ class PhysicalAIOrchestrator:
             return self._local_hold(safe_evidence, safe_action, "AUTHORITY_DECISION_INVALID")
 
     def evaluate_only(self, evidence: EvidenceFrame, action: ProposedAction) -> AuthorityDecision:
-        """Validate and seal a decision without reserving or invoking an actuator."""
         with self._lock:
             self._check_chain()
             validate_inputs(evidence, action)
             start = time.perf_counter_ns()
-            # API callers own their input objects, so take the private canonical
-            # snapshot here before entering the shared evaluation path.
             decision = self._evaluate_checked(copy_evidence(evidence), copy_action(action))
             self.receipts.seal("AUTHORITY_DECISION", decision.to_dict())
             self.metrics.record(decision.verdict.value, decision.authority_latency_ms,
@@ -130,9 +123,6 @@ class PhysicalAIOrchestrator:
             return "DISPATCH_CHECK_FAILED"
 
     def _invoke(self, decision: AuthorityDecision, deadline: int) -> tuple[bool, dict]:
-        # Keep the decision's authorized action as the untouched local baseline.
-        # The actuator receives one detached deep copy. Any mutation of that copy
-        # is therefore visible by direct equality without JSON/SHA work per step.
         expected = decision.authorized_action
         sent = copy_action(expected)
         evidence = decision.evidence
@@ -155,7 +145,8 @@ class PhysicalAIOrchestrator:
             if type(status) is not str or status not in {"EXECUTED", "NOT_EXECUTED", "FAILED", "UNKNOWN"}:
                 status = "UNKNOWN"
             result["status"] = status
-            if result.get("action_id", sent.action_id) != sent.action_id:
+            acknowledged = result.get("action_id")
+            if (acknowledged is not None and acknowledged != sent.action_id) or (status == "EXECUTED" and acknowledged != sent.action_id):
                 result = {"status": "UNKNOWN", "reason": "ACTUATOR_RESULT_BINDING_MISMATCH"}
             elif sent != expected and status == "EXECUTED":
                 result = {"status": "UNKNOWN", "reason": "AUTHORIZED_ACTION_CHANGED"}

@@ -8,8 +8,10 @@ import httpx
 import pytest
 
 from oasse_physical_ai.dispatch import DispatchGuard
-from oasse_physical_ai.gatekeeper_client import GatekeeperClient, AUTHORITY_RESPONSE_INVALID, AUTHORIZED_ACTION_INVALID
+from oasse_physical_ai.gatekeeper_client import (GatekeeperClient, AUTHORITY_RESPONSE_INVALID,
+    AUTHORIZED_ACTION_INVALID, MAX_AUTHORITY_RESPONSE_BYTES)
 from oasse_physical_ai.models import EvidenceFrame, ProposedAction, Verdict
+from oasse_physical_ai.orchestrator import PhysicalAIOrchestrator
 from oasse_physical_ai.policy import ReferenceAuthorityEngine
 
 
@@ -46,6 +48,17 @@ def test_plain_http_authority_endpoint_is_rejected_before_token_can_be_sent():
         GatekeeperClient("http://example.com", token="secret")
 
 
+def test_oversized_authority_response_is_rejected_before_json_parse():
+    evidence, action = fixture()
+    def oversized(_request):
+        return httpx.Response(200, content=b'{"padding":"' + b'x' * MAX_AUTHORITY_RESPONSE_BYTES + b'"}')
+    client = GatekeeperClient("https://gatekeeper.test", transport=httpx.MockTransport(oversized))
+    decision = client.evaluate(evidence, action)
+    assert decision.verdict == Verdict.HOLD
+    assert decision.reason_codes == [AUTHORITY_RESPONSE_INVALID]
+    client.close()
+
+
 def test_live_response_timestamp_must_be_exact_integer():
     evidence, action = fixture()
     client = GatekeeperClient("https://gatekeeper.test", transport=httpx.MockTransport(
@@ -66,6 +79,25 @@ def test_live_transform_trajectory_has_exact_xyz_shape():
     assert decision.verdict == Verdict.HOLD
     assert decision.reason_codes[-1] == AUTHORIZED_ACTION_INVALID
     client.close()
+
+
+def test_executed_result_requires_explicit_matching_action_id():
+    class UnboundActuator:
+        def execute(self, _action): return {"status": "EXECUTED"}
+    orch = PhysicalAIOrchestrator(actuator=UnboundActuator())
+    result = orch.run()
+    assert result.dispatch_attempted and not result.executed
+    assert result.actuator_result == {"status": "UNKNOWN", "reason": "ACTUATOR_RESULT_BINDING_MISMATCH"}
+    assert result.outcome_receipt is not None and orch.receipts.verify()
+
+
+def test_metrics_window_is_bounded_without_losing_lifetime_run_count():
+    from oasse_physical_ai.metrics import Metrics
+    metrics = Metrics(max_samples=16)
+    for index in range(100): metrics.record("ALLOW", float(index), float(index))
+    snapshot = metrics.snapshot()
+    assert snapshot["runs"] == 100 and snapshot["latency_samples"] == 16
+    assert snapshot["verdict_counts"] == {"ALLOW": 100}
 
 
 def test_dispatch_guard_does_not_double_sample_wall_clock_per_check():

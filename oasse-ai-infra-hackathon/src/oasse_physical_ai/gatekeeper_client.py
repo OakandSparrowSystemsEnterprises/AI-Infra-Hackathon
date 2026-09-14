@@ -23,6 +23,10 @@ class AuthorityClient(Protocol):
     def evaluate(self, evidence: EvidenceFrame, action: ProposedAction) -> AuthorityDecision: ...
 
 
+class _AuthorityResponseTooLarge(ValueError):
+    pass
+
+
 AUTHORITY_REQUEST_INVALID = "AUTHORITY_REQUEST_INVALID"
 AUTHORITY_UNAVAILABLE = "AUTHORITY_UNAVAILABLE"
 AUTHORITY_RESPONSE_INVALID = "AUTHORITY_RESPONSE_INVALID"
@@ -153,10 +157,7 @@ def _parse_response(data: Any) -> Dict[str, Any]:
 def _redact_control_text(parsed: Dict[str, Any], secret: str) -> Dict[str, Any]:
     """Redact only fields that can cross a trusted contract boundary.
 
-    Unknown service fields are intentionally ignored and are never traversed.
-    This keeps arbitrary metadata out of both the execution contract and the
-    parser's complexity budget. Accepted numeric trajectory fields cannot carry
-    the bearer token; accepted textual action fields are rejected if they do.
+    Unknown service fields are intentionally ignored and never traversed.
     """
     if not secret:
         return parsed
@@ -174,13 +175,12 @@ def _redact_control_text(parsed: Dict[str, Any], secret: str) -> Dict[str, Any]:
 
 
 class GatekeeperClient:
-    """Pooled, fail-closed HTTP adapter for the Gatekeeper authority endpoint.
+    """Pooled, bounded and fail-closed HTTP authority adapter.
 
-    The HTTP client is created lazily on the first evaluation and then reused,
-    avoiding repeated TCP/TLS setup on the live decision path. Client creation
-    itself remains inside the fail-closed evaluation boundary. Production
-    endpoints require HTTPS; plain HTTP is permitted only for explicitly
-    enabled loopback contract tests.
+    One lazily-created httpx client reuses TCP/TLS connections. Production
+    endpoints require HTTPS. Response bytes are consumed through a bounded
+    stream before JSON parsing so the declared response limit is a real memory
+    boundary rather than a post-buffer size check.
     """
 
     def __init__(self, base_url: str, token: str = "", timeout_s: float = 2.0,
@@ -243,21 +243,27 @@ class GatekeeperClient:
             return self._hold(evidence, action, [AUTHORITY_REQUEST_INVALID], start)
 
         try:
-            response = self._get_client().post(f"{self.base_url}/v1/evaluate", content=body)
-            response.raise_for_status()
-            if len(response.content) > MAX_AUTHORITY_RESPONSE_BYTES:
-                raise ValueError("authority response exceeds size budget")
+            payload = bytearray()
+            with self._get_client().stream("POST", f"{self.base_url}/v1/evaluate", content=body) as response:
+                response.raise_for_status()
+                for chunk in response.iter_bytes():
+                    if len(payload) + len(chunk) > MAX_AUTHORITY_RESPONSE_BYTES:
+                        raise _AuthorityResponseTooLarge("authority response exceeds size budget")
+                    payload.extend(chunk)
         except httpx.HTTPStatusError as exc:
             status = exc.response.status_code
             log.warning("Gatekeeper returned HTTP %s for action %s; holding", status, action.action_id)
             return self._hold(evidence, action, [AUTHORITY_UNAVAILABLE, f"HTTP_{status}"], start)
+        except _AuthorityResponseTooLarge:
+            log.warning("Gatekeeper response exceeded the size budget for action %s; holding", action.action_id)
+            return self._hold(evidence, action, [AUTHORITY_RESPONSE_INVALID], start)
         except Exception as exc:
             log.warning("Gatekeeper unreachable or unusable (%s) for action %s; holding",
                         type(exc).__name__, action.action_id)
             return self._hold(evidence, action, [AUTHORITY_UNAVAILABLE], start)
 
         try:
-            parsed = _redact_control_text(_parse_response(response.json()), self.token)
+            parsed = _redact_control_text(_parse_response(json.loads(payload)), self.token)
             return self._decision_from(parsed, evidence, action, start)
         except Exception as exc:
             log.warning("Gatekeeper response malformed (%s) for action %s; holding", type(exc).__name__, action.action_id)
@@ -333,7 +339,10 @@ def describe_authority(authority: AuthorityClient) -> Dict[str, str]:
 
 def build_authority_client() -> AuthorityClient:
     if configured_authority_mode() == "live":
-        return GatekeeperClient(os.getenv("GATEKEEPER_URL", ""), os.getenv("GATEKEEPER_TOKEN", ""))
+        return GatekeeperClient(
+            os.getenv("GATEKEEPER_URL", ""), os.getenv("GATEKEEPER_TOKEN", ""),
+            timeout_s=float(os.getenv("GATEKEEPER_TIMEOUT_S", "0.25")),
+        )
     return ReferenceAuthorityEngine(
         evidence_max_age_ms=int(os.getenv("EVIDENCE_MAX_AGE_MS", "500")),
         min_confidence=float(os.getenv("MIN_CONFIDENCE", "0.80")),
