@@ -1,18 +1,44 @@
 {
+  "schema": "oasse.lablab-submission.v1",
   "name": "Gatekeeper: Pre-Execution Security for Physical AI",
   "team": "Oak & Sparrow Systems Enterprise",
   "challenge": "Intel Physical AI Challenge",
   "thesis": "Capability proposes. Authority decides. Execution follows authority, not capability.",
-  "demo": "Rendered RGB -> native OpenVINO -> explicit scripted sorting proposal -> independent reference authority -> native MuJoCo idealized-suction transport -> new task postcondition -> chained receipts",
+  "problem": "Physical-AI systems can compress perception, planning and action into a machine-speed loop without an independent answer to whether this exact actor, evidence and action are authorized now.",
+  "solution": "Insert an independent deterministic pre-execution authority boundary between proposed action and physical effect, then bind the observed result back to the authorization record.",
+  "novelty": "The model and robot retain capability but do not possess execution authority. Gatekeeper independently returns ALLOW, TRANSFORM, HOLD or DENY for the exact evidence/action pair before dispatch.",
+  "architecture": [
+    "camera/sensor evidence",
+    "perception -> EvidenceFrame",
+    "VLA/planner -> ProposedAction",
+    "Gatekeeper authority evaluation",
+    "ALLOW | TRANSFORM | HOLD | DENY",
+    "controlled actuator",
+    "post-action observation",
+    "chained decision/outcome/verification receipts"
+  ],
+  "proof_cases": [
+    "fresh valid evidence -> ALLOW",
+    "overspeed proposal -> TRANSFORM -> only constrained replacement executes",
+    "stale evidence -> HOLD -> zero new movement",
+    "authority unavailable -> HOLD -> no actuator call",
+    "replayed evidence -> HOLD",
+    "normal object -> accept destination",
+    "defective object -> reject destination"
+  ],
   "intel_stack": [
     "Intel Core Ultra (onsite target)",
-    "OpenVINO (native rehearsal)",
-    "Anomalib (export contract; trained model pending)",
+    "OpenVINO (native software rehearsal verified)",
+    "Anomalib (onsite trained-export target)",
     "Physical AI Studio (onsite target)",
-    "Robotics AI Suite (onsite target)"
+    "Robotics AI Suite (onsite target)",
+    "LeRobot/event VLA path (onsite target)"
   ],
-  "status": "submission rehearsal implementation; onsite integrations pending",
-  "verified_by": "Run scripts/rehearse_submission.py --profile native and retain its commit-bound evidence; do not infer acceptance from this metadata.",
+  "license": "MIT",
+  "greenfield": true,
+  "provenance": "See GREENFIELD.md and PROVENANCE.json. No external tutorial source, assets, notebooks or weights are vendored.",
+  "status": "final draft software submission; onsite hardware and production-service evidence pending",
+  "verified_by": "Run scripts/check_greenfield.py, scripts/check_submission_draft.py and scripts/rehearse_submission.py --profile native against the exact commit used for evidence.",
   "submission_fields": {
     "demo_video_url": null,
     "judge_repository_url": null,
@@ -23,8 +49,9 @@
     "trained_detector_verified": false,
     "trained_vla_verified": false,
     "production_gatekeeper_verified": false,
-    "grip": "idealized Cartesian suction weld, not SO-101"
+    "physical_robot_safe_interruption_verified": false,
+    "grip": "idealized Cartesian suction weld in software rehearsal, not an onsite robot claim"
   },
-  "offline_demo": "inspection/index.html in the rehearsal evidence package",
+  "offline_demo": "inspection/index.html in the native rehearsal evidence package",
   "submission_sent": false
 }
