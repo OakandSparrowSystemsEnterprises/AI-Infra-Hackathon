@@ -25,9 +25,10 @@ jobs:
           cache-dependency-path: oasse-ai-infra-hackathon/pyproject.toml
       - name: Install
         run: python -m pip install -e ".[dev]"
-      - name: Source hygiene
+      - name: Source and license hygiene
         run: |
           git diff --check HEAD^
+          python scripts/check_greenfield.py
           python -m compileall -q src scripts
           python -m pip check
       - name: Test
@@ -64,7 +65,7 @@ jobs:
               assert result['dispatch_attempted'] is executed, result
           assert request('/v1/receipts')['valid'] is True
           assert request('/v1/metrics')['runs'] == 4
-          print('Docker HTTP smoke passed: ALLOW, HOLD, DENY, TRANSFORM, receipts, metrics')
+          print('Docker HTTP smoke passed')
           PY
   simulator:
     runs-on: ubuntu-latest

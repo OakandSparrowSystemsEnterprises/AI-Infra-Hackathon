@@ -1,0 +1,22 @@
+{
+  "schema": "oasse.greenfield-provenance.v1",
+  "repository_license": "MIT",
+  "greenfield": true,
+  "project_authored_current_tree": true,
+  "third_party_committed_source": [],
+  "third_party_committed_model_weights": [],
+  "third_party_committed_assets": [],
+  "proprietary_gatekeeper_source_committed": false,
+  "external_runtime_dependencies_are_not_relicensed": true,
+  "external_runtime_dependencies": [
+    "FastAPI",
+    "HTTPX",
+    "MuJoCo",
+    "NumPy",
+    "OpenCV",
+    "OpenVINO",
+    "Pydantic",
+    "Uvicorn"
+  ],
+  "notes": "Installed dependencies retain their own licenses. Everything project-authored and committed in this repository is distributed under the repository MIT License."
+}
