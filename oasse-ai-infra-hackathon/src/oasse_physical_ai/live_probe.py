@@ -40,7 +40,8 @@ def probe_gatekeeper(url: str, *, expected_policy_version: str, token: str = "",
     text(expected_policy_version, "expected_policy_version")
     number(timeout_s, "timeout_s", minimum=.01, maximum=10)
     ceiling = number(max_speed_mps, "max_speed_mps", minimum=.001, maximum=1.)
-    client = GatekeeperClient(base, token, timeout_s, transport)
+    client = GatekeeperClient(base, token, timeout_s, transport,
+                              allow_loopback_http=allow_loopback_http)
     orchestrator = PhysicalAIOrchestrator(authority=client)
     try:
         fixtures = (("allow", "ALLOW"), ("overspeed", "TRANSFORM"), ("stale", "HOLD"),

@@ -8,6 +8,7 @@ import os
 import threading
 import time
 from typing import Any, Dict, List, Optional, Protocol, Tuple
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -39,6 +40,7 @@ MAX_REASON_CODES = 64
 MAX_CONTROL_TEXT = 256
 
 _BOUND_FIELDS = ("action_id", "actor_id", "evidence_id")
+_TEXT_OVERRIDE_FIELDS = frozenset({"action_id", "actor_id", "evidence_id", "action_type", "target_bin", "object_id"})
 _ACCEPTED_FIELDS = frozenset(PHYSICAL_ACTION_FIELDS) | frozenset(_BOUND_FIELDS)
 assert _ACCEPTED_FIELDS <= {f.name for f in fields(ProposedAction)}
 
@@ -57,8 +59,28 @@ def _is_text(value: Any, *, maximum: int | None = None) -> bool:
             and (maximum is None or len(value) <= maximum))
 
 
+def _validate_base_url(value: str, *, allow_loopback_http: bool = False) -> str:
+    if not isinstance(value, str) or not value.strip() or value != value.strip():
+        raise ValueError("Gatekeeper base URL is required without surrounding whitespace")
+    if any(ord(char) < 33 for char in value):
+        raise ValueError("Gatekeeper base URL contains whitespace or control characters")
+    url = urlsplit(value)
+    if url.username or url.password or url.query or url.fragment or not url.hostname:
+        raise ValueError("Gatekeeper base URL must not contain credentials, query, or fragment")
+    loopback = url.hostname in {"127.0.0.1", "localhost", "::1"}
+    if url.scheme != "https" and not (allow_loopback_http and loopback and url.scheme == "http"):
+        raise ValueError("Gatekeeper requires HTTPS except explicitly enabled loopback HTTP")
+    try:
+        _ = url.port
+    except ValueError as exc:
+        raise ValueError("Gatekeeper base URL has an invalid port") from exc
+    if url.path.rstrip("/").endswith("/v1/evaluate"):
+        raise ValueError("Gatekeeper base URL must not include /v1/evaluate")
+    return value.rstrip("/")
+
+
 def _valid_override(name: str, value: Any) -> bool:
-    if name in ("action_id", "actor_id", "evidence_id", "action_type", "target_bin", "object_id"):
+    if name in _TEXT_OVERRIDE_FIELDS:
         return _is_text(value, maximum=MAX_CONTROL_TEXT)
     if name == "speed_mps":
         return _is_number(value) and value >= 0
@@ -128,24 +150,47 @@ def _parse_response(data: Any) -> Dict[str, Any]:
     }
 
 
+def _redact_control_text(parsed: Dict[str, Any], secret: str) -> Dict[str, Any]:
+    """Redact only fields that can cross a trusted contract boundary.
+
+    Unknown service fields are intentionally ignored and are never traversed.
+    This keeps arbitrary metadata out of both the execution contract and the
+    parser's complexity budget. Accepted numeric trajectory fields cannot carry
+    the bearer token; accepted textual action fields are rejected if they do.
+    """
+    if not secret:
+        return parsed
+    raw_action = parsed.get("authorized_action")
+    if isinstance(raw_action, dict):
+        for key in _TEXT_OVERRIDE_FIELDS:
+            value = raw_action.get(key)
+            if isinstance(value, str) and secret in value:
+                raise ValueError("authority response echoed credential in executable action data")
+    result = dict(parsed)
+    result["decision_id"] = result["decision_id"].replace(secret, "[REDACTED]")
+    result["policy_version"] = result["policy_version"].replace(secret, "[REDACTED]")
+    result["reason_codes"] = [code.replace(secret, "[REDACTED]") for code in result["reason_codes"]]
+    return result
+
+
 class GatekeeperClient:
     """Pooled, fail-closed HTTP adapter for the Gatekeeper authority endpoint.
 
     The HTTP client is created lazily on the first evaluation and then reused,
     avoiding repeated TCP/TLS setup on the live decision path. Client creation
-    itself remains inside the fail-closed evaluation boundary: missing proxy or
-    transport dependencies therefore become HOLD rather than an uncaught error.
+    itself remains inside the fail-closed evaluation boundary. Production
+    endpoints require HTTPS; plain HTTP is permitted only for explicitly
+    enabled loopback contract tests.
     """
 
     def __init__(self, base_url: str, token: str = "", timeout_s: float = 2.0,
-                 transport: Optional[httpx.BaseTransport] = None) -> None:
-        if not isinstance(base_url, str) or not base_url.strip():
-            raise ValueError("Gatekeeper base URL is required")
+                 transport: Optional[httpx.BaseTransport] = None, *,
+                 allow_loopback_http: bool = False) -> None:
         if not isinstance(token, str):
             raise TypeError("Gatekeeper token must be a string")
         if not _is_number(timeout_s) or not 0 < float(timeout_s) <= 30:
             raise ValueError("Gatekeeper timeout must be in (0, 30] seconds")
-        self.base_url = base_url.rstrip("/")
+        self.base_url = _validate_base_url(base_url, allow_loopback_http=allow_loopback_http)
         self.token = token
         self.timeout_s = float(timeout_s)
         self._transport = transport
@@ -212,7 +257,7 @@ class GatekeeperClient:
             return self._hold(evidence, action, [AUTHORITY_UNAVAILABLE], start)
 
         try:
-            parsed = _parse_response(response.json())
+            parsed = _redact_control_text(_parse_response(response.json()), self.token)
             return self._decision_from(parsed, evidence, action, start)
         except Exception as exc:
             log.warning("Gatekeeper response malformed (%s) for action %s; holding", type(exc).__name__, action.action_id)

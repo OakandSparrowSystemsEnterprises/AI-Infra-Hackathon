@@ -21,29 +21,25 @@ The answer after this pass is: not through the tested software path without viol
 
 ## Final hardening changes
 
-### Connection pooling
+### Connection pooling and transport protection
 
-`GatekeeperClient` lazily creates one pooled `httpx.Client` on the first authority call and reuses it thereafter. That preserves fail-closed handling of client-construction failures while avoiding repeated TCP/TLS setup on the live decision path. The API closes the pool at application shutdown and the live probe closes it explicitly.
+`GatekeeperClient` lazily creates one pooled `httpx.Client` on the first authority call and reuses it thereafter. That preserves fail-closed handling of client-construction failures while avoiding repeated TCP/TLS setup on the live decision path. Production authority endpoints require HTTPS; plain HTTP is accepted only for explicitly enabled loopback contract tests. Request and response bodies are size bounded, and service-controlled narrative fields are credential-redacted before they can enter receipts or reports.
 
 ### Snapshot isolation instead of repeated cryptographic fingerprints
 
-Cross-plane mutation protection now uses detached validated snapshots plus direct structural equality. The planner, authority service adapter and actuator receive copies, never the nested structures stored as the local canonical baseline. This preserves mutation detection while removing repeated JSON serialization and SHA-256 work from the authority hot path and every native physics step.
-
-Cryptographic hashing remains where it belongs: evidence identity, receipts and exported evidence integrity.
+Cross-plane mutation protection uses detached validated snapshots plus direct structural equality. The planner, authority adapter and actuator receive copies, never the nested structures held as the local canonical baseline. The final optimization removes redundant private-to-private copies while preserving a detached copy at every trust-boundary crossing. Cryptographic hashing remains where it belongs: evidence identity, receipts and exported evidence integrity.
 
 ### Constant-time receipt gate
 
-The previous implementation fully re-walked the growing receipt chain before effects. Public receipts are now detached from private immutable stored records, so a consumer cannot corrupt chain state through a returned payload. The hot-path integrity gate validates the immutable tail and adjacent link in O(1); full O(n) verification remains available at `/health`, receipt export and evidence verification.
-
-Receipt identity is included in the hashed envelope, so the receipt ID itself cannot be rewritten without invalidating the record.
+The previous implementation fully re-walked the growing receipt chain before effects. Public receipts are detached from private immutable stored records, so a consumer cannot corrupt chain state through a returned payload. The hot-path integrity gate validates the immutable tail and adjacent link in O(1); full O(n) verification remains available at `/health`, receipt export and evidence verification. Receipt identity is hash-bound.
 
 ### Single-sample dispatch validation
 
-Replay/scene/freshness checking previously sampled freshness twice in a single guard call. `DispatchGuard.check` now accepts the monotonic deadline directly and performs one freshness sample before replay, sequence and scene validation. `reserve` uses the same atomic path.
+Replay/scene/freshness checking performs one freshness sample per guard call and atomically reserves evidence/action identity immediately before actuator invocation.
 
 ### Stricter live contract
 
-Live authority requests and responses are size bounded. Response timestamps must be exact non-negative 64-bit integers, reason-code collections and control strings are bounded, and transformed trajectories must be bounded XYZ paths. These are schema failures, not values silently coerced into an executable command.
+Live authority timestamps must be exact non-negative 64-bit integers, reason-code collections and control strings are bounded, transformed trajectories must be bounded XYZ paths, and oversized or malformed authority traffic fails closed rather than being coerced into execution.
 
 ## Latency discipline
 
