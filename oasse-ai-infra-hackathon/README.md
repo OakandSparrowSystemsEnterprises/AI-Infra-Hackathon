@@ -12,9 +12,23 @@ Gatekeeper is consumed through the `AuthorityClient` / `GatekeeperClient` API bo
 
 `ReferenceAuthorityEngine` in `src/oasse_physical_ai/policy.py` is a local, deterministic reference/simulation authority engine. It exists for local simulation, CI, judging rehearsals, and failure testing. It is MIT-licensed repository code. It is not the proprietary Gatekeeper production engine and is not represented as such.
 
-In the live build, set `AUTHORITY_MODE=live` and `GATEKEEPER_URL` (and `GATEKEEPER_TOKEN` if required) to the governed endpoint, and the same orchestrator will call the production authority service through the same boundary. The default, `AUTHORITY_MODE=reference`, uses the local reference engine, and so does any value other than `live` (matched case-insensitively). The `policy_version` field on every decision identifies which engine produced it (`physical-ai-demo-v1` for the reference engine).
+In the live build, set `AUTHORITY_MODE=live` and `GATEKEEPER_URL` (and `GATEKEEPER_TOKEN` if required) to the governed endpoint, and the same orchestrator will call the production authority service through the same boundary. The default, `AUTHORITY_MODE=reference`, uses the local reference engine, and so does any value other than `live` (matched case-insensitively). The `policy_version` field on every decision identifies which engine produced it (`physical-ai-demo-v1` for the reference engine), and `GET /health` reports the effective `authority_mode`.
 
 See [`NOTICE.md`](NOTICE.md) for the full licensing and IP boundary statement.
+
+## Live-mode contract
+
+`GatekeeperClient` posts `{"evidence": ..., "action": ...}` to `GATEKEEPER_URL/v1/evaluate` and expects a JSON object with `decision_id`, `verdict` (`ALLOW`, `TRANSFORM`, `HOLD`, or `DENY`), and optionally `reason_codes`, `evaluated_at_ms`, `authority_latency_ms` (service-reported), `policy_version`, and `authorized_action`.
+
+The adapter fails closed:
+
+- `ALLOW` executes the proposal exactly as submitted. An `ALLOW` that also carries an `authorized_action` differing from the proposal in a physical field is a contradiction and becomes a `HOLD` with `AUTHORIZED_ACTION_CONFLICT`; an unusable or rebound `authorized_action` under `ALLOW` is held with `AUTHORIZED_ACTION_INVALID` or `AUTHORIZED_ACTION_BINDING_MISMATCH` just as under `TRANSFORM`.
+- `TRANSFORM` executes only the `authorized_action` returned by Gatekeeper, given as a full action object or just the changed fields, and only if it differs from the proposal in a physical field (`action_type`, `target_bin`, `speed_mps`, `object_id`, or `trajectory`). `metadata` and `requested_at_ms` are never taken from the service; the executed action keeps the proposal's values for both. It never falls back to the original proposal. A `TRANSFORM` with no authorized action, an unusable one (wrong field types, a boolean, negative, or non-finite speed, an empty or malformed trajectory), one that leaves the proposal physically unchanged, or one bound to a different `action_id`, `actor_id`, or `evidence_id` becomes a `HOLD`, with `AUTHORIZED_ACTION_MISSING`, `AUTHORIZED_ACTION_INVALID`, `AUTHORIZED_ACTION_UNCHANGED`, or `AUTHORIZED_ACTION_BINDING_MISMATCH` appended to the service's reason codes.
+- Transport errors, timeouts, TLS or proxy problems, and non-2xx statuses become a `HOLD` with `AUTHORITY_UNAVAILABLE` (plus `HTTP_<status>` when a status was received). Bodies that are not JSON, lack `decision_id` or `verdict`, or carry wrongly typed fields become a `HOLD` with `AUTHORITY_RESPONSE_INVALID`. A local evidence or action that cannot be serialized becomes a `HOLD` with `AUTHORITY_REQUEST_INVALID`. `evaluate()` never raises. These decisions carry `policy_version` `gatekeeper-live-unavailable`, record the local time elapsed until the failure as their authority latency (no service-reported value exists), are sealed into the receipt chain like any other decision, and never reach the actuator.
+
+The orchestrator applies the same physical-field rule at the last gate: a `TRANSFORM` whose authorized action is missing or does not physically differ from the proposal is not executed, whichever engine produced it.
+
+`GET /health` reports `authority_mode` (`reference`, `live`, or `custom` for an injected engine, derived from the engine actually wired in), `authority_engine` (its class name), and `authority_mode_setting` (the `AUTHORITY_MODE` value as read). A misconfigured value such as `prod` therefore shows as setting `prod` with effective mode `reference`.
 
 ## Run locally
 
