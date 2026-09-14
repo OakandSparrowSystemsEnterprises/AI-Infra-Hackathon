@@ -16,6 +16,8 @@ jobs:
         working-directory: oasse-ai-infra-hackathon
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -23,6 +25,11 @@ jobs:
           cache-dependency-path: oasse-ai-infra-hackathon/pyproject.toml
       - name: Install
         run: python -m pip install -e ".[dev]"
+      - name: Source hygiene
+        run: |
+          git diff --check HEAD^
+          python -m compileall -q src scripts
+          python -m pip check
       - name: Test
         run: python -m pytest tests -q
       - name: Demo smoke test
@@ -46,8 +53,7 @@ jobs:
                   health = request('/health')
                   break
               except OSError:
-                  if attempt == 29:
-                      raise
+                  if attempt == 29: raise
                   time.sleep(1)
           assert health['status'] == 'ok'
           assert health['authority_mode'] == 'reference'
@@ -91,4 +97,46 @@ jobs:
             ${{ runner.temp }}/mujoco-smoke.json
             ${{ runner.temp }}/simulator-dependencies.txt
           if-no-files-found: error
+          retention-days: 14
+  native-perception:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      MUJOCO_GL: osmesa
+      OASSE_NATIVE_CAMERA_TESTS: "1"
+    defaults:
+      run:
+        working-directory: oasse-ai-infra-hackathon
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: oasse-ai-infra-hackathon/pyproject.toml
+      - name: Install headless rendering
+        run: sudo apt-get update -qq && sudo apt-get install -y libosmesa6
+      - name: Install native inference and physics
+        run: python -m pip install -e ".[dev,simulator,perception]"
+      - name: Require native runtimes and valid dependencies
+        run: |
+          python -c "import openvino, mujoco; print('OpenVINO', openvino.__version__, 'MuJoCo', mujoco.__version__)"
+          python -m pip check
+      - name: Full native suite
+        run: python -m pytest tests -q --junitxml="$RUNNER_TEMP/native-tests.xml"
+      - name: Native vision to physics smoke test
+        run: python scripts/run_native_vision_demo.py --output "$RUNNER_TEMP/native-vision.json" --artifacts-dir "$RUNNER_TEMP/vision-artifacts"
+      - name: Record tested versions
+        run: python -m pip freeze > "$RUNNER_TEMP/native-dependencies.txt"
+      - name: Save native perception evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-perception-verification
+          path: |
+            ${{ runner.temp }}/native-tests.xml
+            ${{ runner.temp }}/native-vision.json
+            ${{ runner.temp }}/native-dependencies.txt
+            ${{ runner.temp }}/vision-artifacts
+          if-no-files-found: warn
           retention-days: 14
