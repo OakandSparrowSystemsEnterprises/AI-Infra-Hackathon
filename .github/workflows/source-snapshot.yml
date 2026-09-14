@@ -1,0 +1,36 @@
+name: Source snapshot
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Archive only committed source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git archive --format=tar.gz --output="$RUNNER_TEMP/source.tar.gz" HEAD
+          git rev-parse HEAD > "$RUNNER_TEMP/source-commit.txt"
+          git ls-tree -r HEAD > "$RUNNER_TEMP/source-tree.txt"
+          cd "$RUNNER_TEMP"
+          sha256sum source.tar.gz > source-sha256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source-snapshot
+          path: |
+            ${{ runner.temp }}/source.tar.gz
+            ${{ runner.temp }}/source-commit.txt
+            ${{ runner.temp }}/source-tree.txt
+            ${{ runner.temp }}/source-sha256.txt
+          if-no-files-found: error
+          retention-days: 14
