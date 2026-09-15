@@ -44,14 +44,22 @@ def _normalize_joint_action(robot: LeRobotArm, raw: Mapping[str, float]) -> dict
 class SO101Actuator:
     """Thin Gatekeeper-to-LeRobot execution boundary.
 
-    The mapper is the only sponsor-specific translation seam. Gatekeeper evaluates
-    the ProposedAction first; this actuator receives only the authorized action
-    selected by PhysicalAIOrchestrator. HOLD/DENY never reach this class.
+    By default the actuator consumes `ProposedAction.joint_action`, which is a
+    governed physical field carried through the authority decision. An optional
+    mapper remains available for compatibility with tests and other planners.
+    HOLD/DENY never reach this class through PhysicalAIOrchestrator.
     """
 
-    def __init__(self, robot: LeRobotArm, mapper: JointActionMapper) -> None:
+    def __init__(self, robot: LeRobotArm, mapper: JointActionMapper | None = None) -> None:
         self.robot = robot
         self.mapper = mapper
+
+    def _joint_action(self, action: ProposedAction) -> Mapping[str, float]:
+        if self.mapper is not None:
+            return self.mapper(action)
+        if action.joint_action is None:
+            raise ValueError("authorized action has no joint_action")
+        return action.joint_action
 
     def execute(self, action: ProposedAction) -> dict[str, object]:
         return self.execute_guarded(action, lambda: None)
@@ -65,7 +73,7 @@ class SO101Actuator:
         if reason is not None:
             return {"status": "NOT_EXECUTED", "reason": reason, "action_id": action.action_id}
 
-        requested = _normalize_joint_action(self.robot, self.mapper(action))
+        requested = _normalize_joint_action(self.robot, self._joint_action(action))
 
         reason = check_step()
         if reason is not None:
