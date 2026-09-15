@@ -41,25 +41,25 @@ def _normalize_joint_action(robot: LeRobotArm, raw: Mapping[str, float]) -> dict
     return normalized
 
 
+def _metadata_joint_action(action: ProposedAction) -> Mapping[str, float]:
+    raw = action.metadata.get("joint_action")
+    if not isinstance(raw, Mapping):
+        raise ValueError("authorized action is missing metadata.joint_action")
+    return raw
+
+
 class SO101Actuator:
     """Thin Gatekeeper-to-LeRobot execution boundary.
 
-    By default the actuator consumes `ProposedAction.joint_action`, which is a
-    governed physical field carried through the authority decision. An optional
-    mapper remains available for compatibility with tests and other planners.
-    HOLD/DENY never reach this class through PhysicalAIOrchestrator.
+    The SO-101 command is carried inside the authorized ProposedAction metadata
+    for this greenfield onsite adapter. ALLOW preserves the exact action object;
+    HOLD/DENY never reach this class. A custom mapper can still be injected for
+    tests or alternate sponsor bindings.
     """
 
     def __init__(self, robot: LeRobotArm, mapper: JointActionMapper | None = None) -> None:
         self.robot = robot
-        self.mapper = mapper
-
-    def _joint_action(self, action: ProposedAction) -> Mapping[str, float]:
-        if self.mapper is not None:
-            return self.mapper(action)
-        if action.joint_action is None:
-            raise ValueError("authorized action has no joint_action")
-        return action.joint_action
+        self.mapper = _metadata_joint_action if mapper is None else mapper
 
     def execute(self, action: ProposedAction) -> dict[str, object]:
         return self.execute_guarded(action, lambda: None)
@@ -73,7 +73,7 @@ class SO101Actuator:
         if reason is not None:
             return {"status": "NOT_EXECUTED", "reason": reason, "action_id": action.action_id}
 
-        requested = _normalize_joint_action(self.robot, self._joint_action(action))
+        requested = _normalize_joint_action(self.robot, self.mapper(action))
 
         reason = check_step()
         if reason is not None:
@@ -95,12 +95,7 @@ def connect_event_so101(
     calibration_id: str = "hack_follower",
     calibrate: bool = False,
 ) -> Any:
-    """Create and connect the event SO-101 without importing LeRobot on dev machines.
-
-    `calibrate=False` is intentional for the event workstation because the station
-    already carries its calibration. If LeRobot reports a calibration mismatch,
-    stop instead of silently recalibrating.
-    """
+    """Create and connect the event SO-101 without importing LeRobot on dev machines."""
 
     try:
         from lerobot.robots.so_follower import SO101Follower, SO101FollowerConfig
