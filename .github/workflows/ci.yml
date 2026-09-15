@@ -36,6 +36,8 @@ jobs:
         run: python -m pytest tests -q
       - name: Demo smoke test
         run: python scripts/run_demo.py
+      - name: Steward injection smoke test
+        run: python scripts/smoke_steward_injection.py
       - name: Reference hot-path latency budget
         run: python scripts/benchmark_hot_path.py --iterations 1000 --max-authority-p95-ms 0.25 --max-pipeline-p95-ms 3.0
       - name: Docker build
