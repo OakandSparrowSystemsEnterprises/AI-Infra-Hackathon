@@ -15,6 +15,7 @@ def main() -> None:
     parser.add_argument("--require-gatekeeper", action="store_true")
     parser.add_argument("--require-anomalib", action="store_true")
     parser.add_argument("--require-lerobot", action="store_true")
+    parser.add_argument("--require-tenki", action="store_true")
     args = parser.parse_args()
     app = Path(__file__).resolve().parents[1]
     report = run_preflight(
@@ -22,6 +23,7 @@ def main() -> None:
         require_gatekeeper=args.require_gatekeeper,
         require_anomalib=args.require_anomalib,
         require_lerobot=args.require_lerobot,
+        require_tenki=args.require_tenki,
         camera_index=args.camera_index,
     )
     output = Path(args.output)

@@ -13,6 +13,7 @@ from .metrics import Metrics
 from .models import AuthorityDecision, DispatchResult, EvidenceFrame, ProposedAction, Verdict, physically_changed
 from .normalization import plain
 from .receipts import ReceiptChain
+from .tenki import PreAuthorityEvidenceProvider, TenkiEvidenceError, build_tenki_provider
 from .providers.actuator import Actuator, SimulatedActuator
 from .providers.perception import MockPerceptionProvider, PerceptionProvider
 from .providers.vla import MockVLAProvider, VLAProvider
@@ -38,11 +39,13 @@ class PhysicalAIOrchestrator:
     def __init__(self, authority: Optional[AuthorityClient] = None,
                  perception: Optional[PerceptionProvider] = None,
                  vla: Optional[VLAProvider] = None, actuator: Optional[Actuator] = None,
-                 dispatch_guard: Optional[DispatchGuard] = None) -> None:
+                 dispatch_guard: Optional[DispatchGuard] = None,
+                 pre_authority: Optional[PreAuthorityEvidenceProvider] = None) -> None:
         self.authority = build_authority_client() if authority is None else authority
         self.perception = MockPerceptionProvider() if perception is None else perception
         self.vla = MockVLAProvider() if vla is None else vla
         self.actuator = SimulatedActuator() if actuator is None else actuator
+        self.pre_authority = build_tenki_provider() if pre_authority is None else pre_authority
         ttl = getattr(self.authority, "evidence_max_age_ms", None)
         if ttl is None:
             ttl = int(os.getenv("EVIDENCE_MAX_AGE_MS", "500"))
@@ -52,9 +55,10 @@ class PhysicalAIOrchestrator:
         self._lock = threading.RLock()
 
     def close(self) -> None:
-        close = getattr(self.authority, "close", None)
-        if callable(close):
-            close()
+        for component in (self.pre_authority, self.authority):
+            close = getattr(component, "close", None)
+            if callable(close):
+                close()
 
     def _check_chain(self) -> None:
         if not self.receipts.assert_intact():
@@ -102,12 +106,76 @@ class PhysicalAIOrchestrator:
         except Exception:
             return self._local_hold(safe_evidence, safe_action, "AUTHORITY_DECISION_INVALID")
 
+    def _apply_pre_authority(self, evidence: EvidenceFrame, action: ProposedAction
+                             ) -> tuple[ProposedAction, dict | None, str | None]:
+        """Attach derived evidence without granting or changing execution authority."""
+        provider = self.pre_authority
+        if provider is None:
+            return action, None, None
+
+        # The planner cannot pre-populate the reserved evidence slot. A forged
+        # sponsor claim must never be allowed to reach Gatekeeper as trusted data.
+        if "pre_authority_evidence" in action.metadata:
+            record = {"schema": "oasse.pre-authority-evidence.v1", "provider": getattr(provider, "name", "unknown"),
+                      "status": "REJECTED", "authority": False,
+                      "required": bool(getattr(provider, "required", False)),
+                      "error_code": "PRE_AUTHORITY_METADATA_RESERVED"}
+            return action, record, "PRE_AUTHORITY_METADATA_RESERVED"
+
+        safe_evidence, safe_action = copy_evidence(evidence), copy_action(action)
+        provider_evidence, provider_action = copy_evidence(safe_evidence), copy_action(safe_action)
+        try:
+            derived = provider.derive(provider_evidence, provider_action)
+            if provider_evidence != safe_evidence or provider_action != safe_action:
+                raise TenkiEvidenceError("PRE_AUTHORITY_INPUT_MUTATED")
+            record = plain(derived, max_depth=16, max_nodes=4096)
+            if not isinstance(record, dict) or record.get("authority") is not False:
+                raise TenkiEvidenceError("PRE_AUTHORITY_EVIDENCE_INVALID")
+            name = getattr(provider, "name", None)
+            if not isinstance(name, str) or not name:
+                raise TenkiEvidenceError("PRE_AUTHORITY_PROVIDER_INVALID")
+            enriched_metadata = dict(copy_action(safe_action).metadata)
+            enriched_metadata["pre_authority_evidence"] = {name: record}
+            enriched = replace(safe_action, metadata=enriched_metadata)
+            validate_inputs(safe_evidence, enriched)
+            # No executable field, identity field, or evidence binding may be
+            # changed by a derived-evidence provider.
+            for field in ("action_id", "actor_id", "action_type", "target_bin", "speed_mps",
+                          "evidence_id", "requested_at_ms", "object_id", "trajectory"):
+                if getattr(enriched, field) != getattr(safe_action, field):
+                    raise TenkiEvidenceError("PRE_AUTHORITY_ACTION_CHANGED")
+            return copy_action(enriched), record, None
+        except TenkiEvidenceError as exc:
+            code = exc.code
+        except Exception:
+            code = "PRE_AUTHORITY_EVIDENCE_INVALID"
+
+        required = bool(getattr(provider, "required", False))
+        failure = {
+            "schema": "oasse.pre-authority-evidence.v1",
+            "provider": getattr(provider, "name", "unknown"),
+            "status": "UNAVAILABLE",
+            "authority": False,
+            "required": required,
+            "error_code": code,
+        }
+        return safe_action, failure, code if required else None
+
+    def _evaluate_with_pre_authority(self, evidence: EvidenceFrame, action: ProposedAction
+                                     ) -> AuthorityDecision:
+        enriched, record, reason = self._apply_pre_authority(evidence, action)
+        if record is not None:
+            self.receipts.seal("PRE_AUTHORITY_EVIDENCE", record)
+        if reason is not None:
+            return self._local_hold(evidence, enriched, reason)
+        return self._evaluate_checked(evidence, enriched)
+
     def evaluate_only(self, evidence: EvidenceFrame, action: ProposedAction) -> AuthorityDecision:
         with self._lock:
             self._check_chain()
             validate_inputs(evidence, action)
             start = time.perf_counter_ns()
-            decision = self._evaluate_checked(copy_evidence(evidence), copy_action(action))
+            decision = self._evaluate_with_pre_authority(copy_evidence(evidence), copy_action(action))
             self.receipts.seal("AUTHORITY_DECISION", decision.to_dict())
             self.metrics.record(decision.verdict.value, decision.authority_latency_ms,
                                 (time.perf_counter_ns() - start) / 1e6)
@@ -172,7 +240,12 @@ class PhysicalAIOrchestrator:
             action = copy_action(proposed)
         except Exception:
             return self._failure("PROPOSAL_INVALID", start)
-        decision = self._evaluate_checked(evidence, action)
+
+        action, pre_record, pre_reason = self._apply_pre_authority(evidence, action)
+        if pre_record is not None:
+            self.receipts.seal("PRE_AUTHORITY_EVIDENCE", pre_record)
+        decision = (self._local_hold(evidence, action, pre_reason)
+                    if pre_reason is not None else self._evaluate_checked(evidence, action))
         dispatchable = executable(decision)
         if dispatchable:
             reason = self._guard_reason(evidence, action, deadline)

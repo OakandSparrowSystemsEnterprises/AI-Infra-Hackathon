@@ -41,7 +41,18 @@ def _https_endpoint(value: str) -> bool:
         parsed = urlsplit(value)
     except (TypeError, ValueError):
         return False
-    return parsed.scheme == "https" and bool(parsed.hostname)
+    return parsed.scheme == "https" and bool(parsed.hostname) and not (
+        parsed.username or parsed.password or parsed.query or parsed.fragment
+    )
+
+
+def _tenki_endpoint(value: str) -> bool:
+    if not _https_endpoint(value):
+        return False
+    try:
+        return urlsplit(value).path.rstrip("/").endswith("/derive")
+    except (TypeError, ValueError):
+        return False
 
 
 def run_preflight(
@@ -50,6 +61,7 @@ def run_preflight(
     require_gatekeeper: bool = False,
     require_anomalib: bool = False,
     require_lerobot: bool = False,
+    require_tenki: bool = False,
     camera_index: int | None = None,
 ) -> dict[str, Any]:
     """Inspect the local machine without sending any robot command.
@@ -125,6 +137,22 @@ def run_preflight(
         checks["gatekeeper_endpoint_configured"] = bool(endpoint) and _https_endpoint(endpoint)
         checks["gatekeeper_token_present"] = token_present
 
+    tenki_mode = os.getenv("TENKI_MODE", "off").strip().lower()
+    tenki_endpoint = os.getenv("TENKI_DERIVE_URL", "").strip()
+    tenki_token_present = bool(os.getenv("TENKI_DERIVE_TOKEN", "").strip())
+    details["tenki"] = {
+        "mode": tenki_mode,
+        "configured": bool(tenki_endpoint),
+        "endpoint": tenki_endpoint if tenki_endpoint else None,
+        "https_derive": _tenki_endpoint(tenki_endpoint),
+        "derive_token_present": tenki_token_present,
+        "token_value_recorded": False,
+        "authority": False,
+    }
+    if require_tenki:
+        checks["tenki_mode_enabled"] = tenki_mode in {"observe", "required"}
+        checks["tenki_endpoint_configured"] = _tenki_endpoint(tenki_endpoint)
+
     if camera_index is not None:
         if type(camera_index) is not int or camera_index < 0:
             raise ValueError("camera_index must be a non-negative integer")
@@ -160,6 +188,8 @@ def run_preflight(
         required.append("lerobot_installed")
     if require_gatekeeper:
         required.extend(("gatekeeper_endpoint_configured", "gatekeeper_token_present"))
+    if require_tenki:
+        required.extend(("tenki_mode_enabled", "tenki_endpoint_configured"))
     if camera_index is not None:
         required.extend(("camera_opened", "camera_frame_received"))
 
