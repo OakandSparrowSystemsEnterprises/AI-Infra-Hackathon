@@ -1,31 +1,32 @@
 {
   "schema": "oasse.lablab-submission.v1",
   "name": "Gatekeeper: Pre-Execution Security for Physical AI",
-  "team": "Oak & Sparrow Systems Enterprise",
+  "team": "Oak & Sparrow Systems Enterprise LLC",
   "challenge": "Intel Physical AI Challenge",
   "challenge_sponsor": "Intel",
   "thesis": "Capability proposes. Authority decides. Execution follows authority, not capability.",
   "problem": "Physical-AI systems can compress perception, planning and action into a machine-speed loop without an independent answer to whether this exact actor, evidence and action are authorized now.",
-  "solution": "Insert an independent deterministic pre-execution authority boundary between proposed action and physical effect, then bind the observed result back to the authorization record.",
-  "novelty": "The model and robot retain capability but do not possess execution authority. Gatekeeper independently returns ALLOW, TRANSFORM, HOLD or DENY for the exact evidence/action pair before dispatch.",
+  "solution": "Insert an independent deterministic pre-execution authority boundary between proposed action and physical effect. Optionally attach isolated, non-authoritative Tenki-derived evidence about the exact proposal before Gatekeeper evaluates it, then bind the observed result back to the authorization record.",
+  "novelty": "The model and robot retain capability but do not possess execution authority. Optional derived compute may contribute evidence but cannot authorize effect. Gatekeeper independently returns ALLOW, TRANSFORM, HOLD or DENY for the exact evidence/action pair before dispatch.",
   "mathematical_architecture": {
     "conceptual_only": true,
     "core_invariant": "I(x_(n+1)) = I(x_n) = iota",
     "admissible_space": "X_I = {x in X : I(x) = iota}",
     "controlled_transition": "C_I : X_I -> X_I",
-    "pipeline": "Observe -> Propose -> Project into the admissible state space -> Execute -> Prove",
-    "discipline": "The invariant constrains admissible transitions; it does not uniquely choose the optimal next action or claim GOI validation."
+    "pipeline": "Observe -> Propose -> Derive evidence when configured -> Project into the admissible state space -> Execute -> Prove",
+    "discipline": "The invariant constrains admissible transitions; it does not uniquely choose the optimal next action or claim GOI validation. Tenki-derived evidence is non-authoritative and does not alter this invariant."
   },
   "sponsor_story": "Intel supplies the physical-AI capability surface: edge execution, inference and robotics tooling. Gatekeeper supplies the independent authority surface. The demo makes Intel's contribution visible through runtime/device evidence, inference output and the physical-AI execution path rather than only listing sponsor technologies.",
   "architecture": [
     "camera/sensor evidence",
     "Intel/OpenVINO perception -> EvidenceFrame",
     "VLA/planner -> ProposedAction",
+    "optional Tenki isolated derived evidence -> exact artifact binding, authority=false",
     "Gatekeeper authority evaluation / admissibility projection",
     "ALLOW | TRANSFORM | HOLD | DENY",
     "controlled physical-AI actuator path",
     "post-action observation",
-    "chained decision/outcome/verification receipts"
+    "chained pre-authority/decision/outcome/verification receipts"
   ],
   "proof_cases": [
     "fresh valid evidence -> ALLOW",
@@ -34,7 +35,8 @@
     "authority unavailable -> HOLD -> no actuator call",
     "replayed evidence -> HOLD",
     "normal object -> accept destination",
-    "defective object evidence -> reject proposal may remain admissible and receive ALLOW"
+    "defective object evidence -> reject proposal may remain admissible and receive ALLOW",
+    "optional Tenki claim -> exact proposal artifact/effect/principal binding with authority=false before Gatekeeper"
   ],
   "intel_stack": [
     "Intel Core Ultra (onsite target)",
@@ -44,16 +46,25 @@
     "Robotics AI Suite (onsite target; robot runtime role should be shown when verified)",
     "LeRobot/event VLA path (onsite target)"
   ],
+  "tenki_integration": {
+    "role": "optional isolated pre-authority derived evidence",
+    "authoritative": false,
+    "default_mode": "off",
+    "supported_modes": ["off", "observe", "required"],
+    "contract": "POST /derive with artifact_ref, artifact_sha256, requested_effect and principal; accepted claim must remain authority=false and bind exactly to those values",
+    "live_runtime_verified": false,
+    "activation": "Run scripts/probe_tenki.py onsite, use observe first, promote to required only when live latency is stable inside the evidence freshness budget"
+  },
   "event_ecosystem": [
     "AI Infra Summit",
     "lablab.ai",
     "Native"
   ],
-  "sponsor_evidence": "Run scripts/sponsor_showcase.py --output onsite/sponsor-runtime.json and include the output with final onsite evidence.",
+  "sponsor_evidence": "Run scripts/sponsor_showcase.py --output onsite/sponsor-runtime.json and include the output with final onsite evidence. If Tenki is enabled, separately run scripts/probe_tenki.py --output onsite/tenki-probe.json and preserve the resulting PRE_AUTHORITY_EVIDENCE receipt.",
   "license": "MIT",
   "greenfield": true,
-  "provenance": "See GREENFIELD.md and PROVENANCE.json. No external tutorial source, assets, notebooks or weights are vendored.",
-  "status": "final draft software submission; onsite hardware and production-service evidence pending",
+  "provenance": "See GREENFIELD.md and PROVENANCE.json. No external tutorial source, assets, notebooks, weights or Tenki platform source are vendored.",
+  "status": "final draft software submission; onsite hardware, live Tenki runtime and production-service evidence pending",
   "verified_by": "Run scripts/check_greenfield.py, scripts/check_submission_draft.py and scripts/rehearse_submission.py --profile native against the exact commit used for evidence.",
   "submission_fields": {
     "demo_video_url": null,
@@ -65,6 +76,7 @@
     "trained_detector_verified": false,
     "trained_vla_verified": false,
     "production_gatekeeper_verified": false,
+    "live_tenki_verified": false,
     "physical_robot_safe_interruption_verified": false,
     "grip": "idealized Cartesian suction weld in software rehearsal, not an onsite robot claim"
   },
