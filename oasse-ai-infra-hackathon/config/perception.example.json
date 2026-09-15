@@ -1,0 +1,30 @@
+{
+  "_comment": "Trained perception configuration. Values are examples; the artifact digest, thresholds and calibration_id must come from the actual prepared artifact and its held-out calibration. Model binaries, datasets and checkpoints stay outside this repository.",
+  "model": {
+    "prepared_ir": "onsite/padim_prepared.xml",
+    "artifact_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+    "device": "CPU",
+    "height": 240,
+    "width": 320,
+    "input_layout": "NCHW-f32-RGB-div255"
+  },
+  "camera": {
+    "ingress": "opencv",
+    "camera_index": 0,
+    "camera_id": "onsite-cam-0",
+    "context_entrypoint": "onsite.context:workspace_context",
+    "_sponsor_alternative": {
+      "ingress": "sponsor",
+      "capture_entrypoint": "onsite.bridge:capture_frame",
+      "_note": "Sponsor ingress carries its own explicit workspace and timing context; context_entrypoint does not apply."
+    }
+  },
+  "decoder": {
+    "image_threshold": 0.5,
+    "pixel_threshold": 0.5,
+    "confidence": 0.9,
+    "calibration_id": "REPLACE-with-id-bound-to-dataset-model-and-camera",
+    "model_id": "anomalib-prepared-export",
+    "_constraint": "pixel_threshold must not exceed image_threshold."
+  }
+}
