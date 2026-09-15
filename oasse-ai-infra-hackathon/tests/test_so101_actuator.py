@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from oasse_physical_ai.models import ProposedAction
+from dataclasses import replace
+
+from oasse_physical_ai.models import ProposedAction, physically_changed
 from oasse_physical_ai.providers.so101 import SO101Actuator
 
 
@@ -28,28 +30,32 @@ class FakeRobot:
         pass
 
 
-def action() -> ProposedAction:
-    return ProposedAction.pick_place("ev-1", action_id="act-1")
-
-
-def joints(_: ProposedAction) -> dict[str, float]:
+def joint_values() -> dict[str, float]:
     return {name: float(i) for i, name in enumerate(FEATURES)}
 
 
-def test_authorized_action_reaches_robot_once() -> None:
+def action() -> ProposedAction:
+    return ProposedAction.pick_place("ev-1", action_id="act-1", joint_action=joint_values())
+
+
+def joints(_: ProposedAction) -> dict[str, float]:
+    return joint_values()
+
+
+def test_authorized_joint_action_reaches_robot_once() -> None:
     robot = FakeRobot()
-    actuator = SO101Actuator(robot, joints)
+    actuator = SO101Actuator(robot)
 
     result = actuator.execute_guarded(action(), lambda: None)
 
     assert result["status"] == "EXECUTED"
     assert result["action_id"] == "act-1"
-    assert robot.calls == [joints(action())]
+    assert robot.calls == [joint_values()]
 
 
 def test_guard_blocks_before_physical_send() -> None:
     robot = FakeRobot()
-    actuator = SO101Actuator(robot, joints)
+    actuator = SO101Actuator(robot)
 
     result = actuator.execute_guarded(action(), lambda: "EVIDENCE_EXPIRED_AT_DISPATCH")
 
@@ -63,13 +69,23 @@ def test_guard_blocks_before_physical_send() -> None:
 
 def test_wrong_joint_shape_never_reaches_robot() -> None:
     robot = FakeRobot()
-    actuator = SO101Actuator(robot, lambda _: {"shoulder_pan.pos": 1.0})
+    bad = replace(action(), joint_action={"shoulder_pan.pos": 1.0})
+    actuator = SO101Actuator(robot)
 
     try:
-        actuator.execute(action())
+        actuator.execute(bad)
     except ValueError as exc:
         assert "action keys mismatch" in str(exc)
     else:
         raise AssertionError("expected invalid joint action to fail")
 
     assert robot.calls == []
+
+
+def test_joint_action_is_a_physical_action_field() -> None:
+    original = action()
+    changed = dict(original.joint_action or {})
+    changed["shoulder_pan.pos"] += 10.0
+    transformed = replace(original, joint_action=changed)
+
+    assert physically_changed(transformed, original)
