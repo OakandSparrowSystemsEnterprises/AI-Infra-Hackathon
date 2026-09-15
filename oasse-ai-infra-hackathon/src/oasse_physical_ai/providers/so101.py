@@ -97,7 +97,7 @@ def connect_event_so101(
     try:
         from lerobot.robots.so_follower import SO101Follower, SO101FollowerConfig
     except ImportError as exc:  # pragma: no cover - hardware environment only
-        raise RuntimeError("LeRobot is not installed in this Python environment") from exc
+        raise RuntimeError("LeRobot SO-101 follower API is not installed in this Python environment") from exc
 
     config = SO101FollowerConfig(port=port, id=calibration_id)
     robot = SO101Follower(config)
