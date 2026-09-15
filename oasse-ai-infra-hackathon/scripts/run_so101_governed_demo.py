@@ -44,8 +44,10 @@ def main() -> int:
             propose=lambda evidence, scenario="allow": ProposedAction.pick_place(
                 evidence.evidence_id,
                 speed_mps=0.05,
-                joint_action=dict(target),
-                metadata={"planner": "onsite-so101-governed-demo"},
+                metadata={
+                    "planner": "onsite-so101-governed-demo",
+                    "joint_action": dict(target),
+                },
             )
         )
         actuator = SO101Actuator(robot)
