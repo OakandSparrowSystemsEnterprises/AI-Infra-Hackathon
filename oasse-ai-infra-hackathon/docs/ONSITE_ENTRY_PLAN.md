@@ -14,6 +14,7 @@ Intel's official event material calls this the **Physical AI Challenge**. LabLab
 - Registration QR code ready offline on the phone.
 - Repository credentials confirmed.
 - Gatekeeper endpoint/token available locally, never committed.
+- Tenki access/provisioning method available locally, but leave `TENKI_MODE=off` for first hardware bring-up.
 - Intel sponsor resources and this repo available offline.
 - Bring any useful Intel-based development laptop for parallel work, but treat the event kit as the primary hardware target.
 
@@ -42,9 +43,58 @@ As soon as the Intel kit is in hand:
 6. Run our non-actuating preflight.
 7. Ask the sponsor-binding questions in `ONSITE_SPONSOR_BINDING.md`.
 8. Scaffold and fill the local sponsor bridge.
-9. Resolve all bindings without motion.
+9. Resolve all Intel hardware/model bindings without motion.
+10. Keep Tenki disabled until the direct Intel capability -> Gatekeeper -> actuator path is green.
 
-**First-hour success condition:** the Intel stack verifies, camera and robot APIs are identified, the model/planner path is understood, the sponsor bindings resolve, and no authority-core file has been edited.
+**First-hour success condition:** the Intel stack verifies, camera and robot APIs are identified, the model/planner path is understood, the sponsor bindings resolve, Gatekeeper's non-actuating probe passes, and no authority-core file has been edited.
+
+## Tenki activation lane — only after the Intel path is green
+
+Tenki is already integrated in the repository as a non-authoritative pre-authority evidence plane. Do not spend the first hardware hour provisioning it. The direct Intel/Gatekeeper path must work first.
+
+Once camera -> detector -> planner -> Gatekeeper -> robot serialization/dry-run is green:
+
+1. Provision or restore the known Tenki `/derive` worker using the available Tenki workflow.
+2. Set only the exposed worker URL locally:
+
+   ```sh
+   TENKI_MODE=off
+   TENKI_DERIVE_URL=https://.../derive
+   ```
+
+3. Run the non-actuating probe:
+
+   ```sh
+   python scripts/probe_tenki.py --output onsite/tenki-probe.json
+   ```
+
+4. If the probe passes, set `TENKI_MODE=observe` and run the software path. Confirm a `PRE_AUTHORITY_EVIDENCE` receipt appears and the Tenki claim says `authority=false`, `compute_plane=tenki`, and `role=derived_claim_only`.
+5. Measure the current event latency. Historical Tenki latency is not an onsite performance claim.
+6. If Tenki stays stable inside the evidence freshness budget, set `TENKI_MODE=required` for the judged proof.
+7. If Tenki becomes unstable, drop back to `observe` or `off` rather than changing Gatekeeper, freshness limits, or robot safety semantics.
+
+The judged architecture remains:
+
+```text
+Intel perception / Physical AI Studio / VLA
+                   |
+                   v
+          exact ProposedAction
+                   |
+                   v
+               Tenki
+      isolated derived evidence
+          authority = false
+                   |
+                   v
+              Gatekeeper
+         sole execution authority
+                   |
+                   v
+          Intel robot/controller
+```
+
+See `TENKI_INTEGRATION.md` for the exact contract and claim boundary.
 
 ## Mandatory hackathon information windows
 
@@ -148,9 +198,12 @@ Until the Intel path is green:
 - no architecture rewrites;
 - no new research layer;
 - no broad Summit networking block;
+- no Tenki provisioning before the direct Intel/Gatekeeper path is proven;
 - no optional sponsor integration unrelated to the Intel challenge;
 - no reinstalling working sponsor packages simply to match our local pins;
 - no demo-polish work before the camera -> detector -> planner -> Gatekeeper -> actuator path works.
+
+After the direct path is green, Tenki activation is a bounded integration task because its adapter, contract, probe and receipts are already in the repository.
 
 If the sponsor changes an API or task, modify the thin bridge first. The core authority layer moves only if the sponsor exposes a genuine contract mismatch.
 
@@ -170,3 +223,11 @@ Before first motion:
 - Hardware operator approves the smallest test movement.
 
 Then move the robot.
+
+Before the **judged Tenki-enabled proof**, additionally require:
+
+- Tenki `/derive` probe passes without hardware motion.
+- Tenki claim is bound to the exact evidence/action artifact.
+- Tenki explicitly reports `authority=false`.
+- Current Tenki latency remains inside the evidence freshness budget.
+- `PRE_AUTHORITY_EVIDENCE` receipt is present and the full receipt chain verifies.

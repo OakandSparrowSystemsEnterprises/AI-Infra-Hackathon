@@ -8,7 +8,7 @@ Built for **AI INFRA SUMMIT 2026** with the **lablab.ai** and **Native** hackath
 
 > **Capability proposes. Authority decides. Execution follows authority, not capability.**
 
-Oak & Sparrow Systems Enterprise LLC built a greenfield MIT-licensed authority layer for Physical AI. **INTEL** supplies the capability surface that makes the challenge interesting: edge compute, accelerated inference and robotics tooling. Gatekeeper adds the independent machine-speed authority boundary immediately before physical effect.
+Oak & Sparrow Systems Enterprise LLC built a greenfield MIT-licensed authority layer for Physical AI. **INTEL** supplies the capability surface that makes the challenge interesting: edge compute, accelerated inference and robotics tooling. Gatekeeper adds the independent machine-speed authority boundary immediately before physical effect. **Tenki** can optionally supply isolated, non-authoritative derived evidence about the exact proposal before Gatekeeper evaluates it.
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -16,6 +16,13 @@ Oak & Sparrow Systems Enterprise LLC built a greenfield MIT-licensed authority l
 │  Core Ultra -> OpenVINO -> Anomalib -> Physical AI / VLA -> Robotics       │
 └──────────────────────────────────────┬───────────────────────────────────────┘
                                        │ EvidenceFrame + ProposedAction
+                                       v
+                         ┌───────────────────────────┐
+                         │ TENKI DERIVED EVIDENCE    │
+                         │ optional isolated compute │
+                         │ authority = false         │
+                         └─────────────┬─────────────┘
+                                       │ exact artifact + claim
                                        v
                          ┌───────────────────────────┐
                          │ GATEKEEPER AUTHORITY      │
@@ -31,6 +38,8 @@ Oak & Sparrow Systems Enterprise LLC built a greenfield MIT-licensed authority l
 │          robot command -> observed outcome -> chained receipts              │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
+
+Tenki is **not** an authority layer. With Tenki disabled, the original path is unchanged. With it enabled, Tenki derives a bounded claim about the SHA-256-bound evidence/action artifact, and Gatekeeper remains the sole authority source.
 
 The deeper architecture treats authority as an **admissible transition space**, not merely a rule checked after planning:
 
@@ -52,6 +61,7 @@ I(C_I(x))=I(x)=\iota.
 - [Final logic and hardening review](oasse-ai-infra-hackathon/docs/FINAL_LOGIC_REVIEW.md)
 - [Final project draft](oasse-ai-infra-hackathon/docs/FINAL_DRAFT.md)
 - [Authority invariant architecture](oasse-ai-infra-hackathon/docs/AUTHORITY_INVARIANT.md)
+- [Tenki pre-authority integration](oasse-ai-infra-hackathon/docs/TENKI_INTEGRATION.md)
 - [Sponsor showcase strategy](oasse-ai-infra-hackathon/docs/SPONSOR_SHOWCASE.md)
 - [Onsite sponsor binding kit](oasse-ai-infra-hackathon/docs/ONSITE_SPONSOR_BINDING.md)
 - [Focused onsite entry plan](oasse-ai-infra-hackathon/docs/ONSITE_ENTRY_PLAN.md)
@@ -68,16 +78,24 @@ Run `python scripts/sponsor_showcase.py --output onsite/sponsor-runtime.json` fr
 
 **AI INFRA SUMMIT**, **lablab.ai** and **Native** are credited prominently as the event/hackathon ecosystem. Event-level Diamond Partners are recognized in the sponsor document without implying that every event sponsor is part of this project's technical dependency graph.
 
+## Tenki proof boundary
+
+The repository now includes a fully wired but default-off Tenki pre-authority path. `TENKI_MODE=observe` records a valid claim when available without making Tenki a dependency. `TENKI_MODE=required` fails closed before Gatekeeper if the declared Tenki evidence requirement is not satisfied. `TENKI_MODE=off` preserves the original architecture and latency path.
+
+The Tenki client uses the already-established OASSE `/derive` contract: exact artifact reference, digest, requested effect and principal. It rejects any response that attempts to assert authority, rebind the artifact, or supply an unbound claim. A successful result is sealed as `PRE_AUTHORITY_EVIDENCE` before the Gatekeeper decision receipt.
+
+The code/contract is CI-tested. **A live Tenki worker and current event latency are not claimed until the onsite `/derive` probe is run and recorded.**
+
 ## Current proof
 
 The reproducible software rehearsal demonstrates native OpenVINO inference, native MuJoCo dynamics, normal/defective routing, transformed motion, stale/replayed evidence holds, authority-outage fail-closed behavior, post-action verification and chained receipts.
 
 A detected defect does not automatically equal an authority violation. **Perception supplies facts; authority determines admissibility.** Likewise, the authority invariant constrains what may execute but does not claim to choose the uniquely optimal action.
 
-The software rehearsal intentionally labels its detector, planner and grip as reference components. Onsite hardware, trained Anomalib/VLA use and production Gatekeeper are upgraded from *pending* only after evidence from the actual run exists.
+The software rehearsal intentionally labels its detector, planner and grip as reference components. Onsite hardware, trained Anomalib/VLA use, live Tenki runtime evidence and production Gatekeeper are upgraded from *pending* only after evidence from the actual run exists.
 
 ## Greenfield MIT boundary
 
-Everything authored and committed in this LabLab repository is greenfield MIT project code. External runtimes remain separately licensed dependencies and are not vendored or relicensed here. Proprietary Gatekeeper production source remains outside the repository behind the MIT-licensed adapter boundary.
+Everything authored and committed in this LabLab repository is greenfield MIT project code. External runtimes remain separately licensed dependencies and are not vendored or relicensed here. Proprietary Gatekeeper production source remains outside the repository behind the MIT-licensed adapter boundary. Tenki is consumed only through its external runtime/API boundary; no Tenki platform source is vendored here.
 
 See [GREENFIELD.md](GREENFIELD.md), [PROVENANCE.json](oasse-ai-infra-hackathon/PROVENANCE.json), [LICENSE](LICENSE) and [NOTICE](oasse-ai-infra-hackathon/NOTICE.md).

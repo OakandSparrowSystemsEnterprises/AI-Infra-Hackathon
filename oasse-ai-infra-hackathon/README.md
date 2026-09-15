@@ -1,14 +1,16 @@
 # Gatekeeper: Pre-Execution Security for Physical AI
 
-This is Oak & Sparrow Systems Enterprise LLC's AI Infra hackathon integration. A model may be capable of proposing a movement without having authority to cause it. The application keeps evidence, planning, authority and execution separate, with a decision receipt before dispatch and an outcome receipt after every attempted effect.
+This is Oak & Sparrow Systems Enterprise LLC's AI Infra hackathon integration. A model may be capable of proposing a movement without having authority to cause it. The application keeps evidence, planning, derived compute, authority and execution separate, with a decision receipt before dispatch and an outcome receipt after every attempted effect.
 
 The conceptual model is an invariant-preserving transition system: authority defines the admissible state-transition space rather than merely attaching a rule to a completed plan. See [Authority as an Invariant-Preserving Transition System](docs/AUTHORITY_INVARIANT.md).
 
 ## Current runnable paths
 
-The default service runs synthetic perception, a scripted proposal generator, the local reference authority engine and a simulated actuator. It provides a lightweight dashboard and API without requiring OpenVINO, MuJoCo or robot hardware.
+The default service runs synthetic perception, a scripted proposal generator, the local reference authority engine and a simulated actuator. It provides a lightweight dashboard and API without requiring OpenVINO, MuJoCo, Tenki or robot hardware.
 
 The native simulation path uses actual MuJoCo dynamics in an independently authored three-axis Cartesian carrier scene. The native vision path adds rendered RGB frames and a real compiled OpenVINO IR graph before authority evaluation and controlled physics execution. Its included graph compares pixels against a reference image; it is not a trained anomaly model. Workspace and geometry context are explicitly labeled simulator ground truth. Neither path is an SO-101 or bimanual grasp-and-sort demonstration.
+
+An optional Tenki path adds isolated, non-authoritative derived evidence between proposal and Gatekeeper. It is OFF by default, so existing behavior and latency remain unchanged. See [Tenki Integration](docs/TENKI_INTEGRATION.md).
 
 See [Architecture](docs/ARCHITECTURE.md), [Phase 2 runtime](docs/PHASE2_RUNTIME.md), [Phase 3 native perception](docs/PHASE3_NATIVE_PERCEPTION.md), and [Jackson's perception handoff](docs/JACKSON_PERCEPTION.md) for exact boundaries and integration instructions.
 
@@ -36,11 +38,27 @@ MUJOCO_GL=osmesa python scripts/run_native_vision_demo.py --output native-vision
 
 Headless Ubuntu needs the `libosmesa6` system package for the vision example. Select the GL backend before importing MuJoCo. CPU inference and Linux OSMesa are exercised by CI. Other device and renderer configurations require their own verification. The native example saves exact rendered PPM images, exported reference IR fixtures and JSON receipts rather than presenting callbacks as executed native components.
 
-## Authority and dispatch
+## Authority, Tenki and dispatch
 
-The intended path is `camera -> perception -> EvidenceFrame -> VLA proposal -> ProposedAction -> Gatekeeper -> authorized action -> actuator -> outcome receipt`.
+The direct path is:
+
+```text
+camera -> perception -> EvidenceFrame -> VLA proposal -> ProposedAction -> Gatekeeper -> authorized action -> actuator -> outcome receipt
+```
+
+The optional Tenki path is:
+
+```text
+camera -> perception -> EvidenceFrame -> VLA proposal -> ProposedAction
+       -> Tenki derived evidence (authority=false)
+       -> Gatekeeper -> authorized action -> actuator -> outcome receipt
+```
 
 Conceptually, if `I` is the governing invariant and `X_I={x:I(x)=iota}` is the admissible state space, an executable transition must remain inside `X_I`. In compact form, `C_I:X_I -> X_I`. The planner chooses proposals; authority determines whether the exact proposed transition is admissible. This does not imply that the invariant chooses the unique next action.
+
+Tenki does not change that authority model. Its client hashes the exact normalized evidence/action artifact, submits the digest, requested effect and principal to `POST /derive`, validates the returned claim, and attaches it under the reserved `pre_authority_evidence.tenki` metadata field. A valid claim must remain `authority=false`, bind to the exact artifact/effect/principal, identify `compute_plane=tenki` and `role=derived_claim_only`, and provide a bounded claim hash. The planner cannot populate that reserved field itself.
+
+`TENKI_MODE=off` is the default. `observe` records a valid Tenki claim when available but does not make Tenki a dependency. `required` produces HOLD before Gatekeeper when the declared Tenki evidence requirement is not satisfied. A successful or failed Tenki attempt is sealed as `PRE_AUTHORITY_EVIDENCE`; it is never represented as an authority decision.
 
 `ALLOW` permits the unchanged proposal. `TRANSFORM` requires an explicitly authorized physical change, not a metadata-only or timestamp-only edit. `HOLD` and `DENY` never dispatch. The live adapter rejects missing or malformed authorized actions, identity rebinding, contradictory ALLOW payloads and nonfinite or wrongly typed values. Transport failures and malformed responses produce fail-closed decisions rather than allowing the action.
 
@@ -70,14 +88,18 @@ Set `AUTHORITY_MODE=live`, `GATEKEEPER_URL`, and `GATEKEEPER_TOKEN` when require
 
 `GatekeeperClient` posts `{"evidence": ..., "action": ...}` to `GATEKEEPER_URL/v1/evaluate`. It requires a known `verdict` and a nonempty `decision_id`, with optional `reason_codes`, `evaluated_at_ms`, `authority_latency_ms`, `policy_version` and `authorized_action`. TRANSFORM requires a full action or explicit field changes. Only accepted physical and identity fields are applied; service metadata and requested timestamps do not replace the proposal's informational fields. Service-reported latency and local failure elapsed time are distinguished in the implementation documentation and must not be passed off as a whole-system benchmark.
 
+Tenki is also external runtime technology. No Tenki platform source or credential is distributed by this repository. Configure `TENKI_MODE`, `TENKI_DERIVE_URL`, `TENKI_TIMEOUT_S`, and optionally `TENKI_DERIVE_TOKEN` locally. Run `python scripts/probe_tenki.py --output onsite/tenki-probe.json` before enabling it in the judged path. The probe never calls Gatekeeper or an actuator.
+
 No source or assets from the external LeRobot tutorial are included. Its workflow informed the interface discussion only. See [NOTICE.md](NOTICE.md) for the licensing and proprietary-technology boundary.
 
 ## Verification and submission scope
 
-CI tests the lightweight Python path, reference scenarios, Docker build and real HTTP startup. Separate jobs require native MuJoCo and native OpenVINO imports, execute their tests and smoke runners, and archive exact dependency versions and verification records. Optional-dependency skips in the lightweight job are not counted as native runtime proof; the native job runs the full stack.
+CI tests the lightweight Python path, reference scenarios, Tenki contract/binding behavior, Docker build and real HTTP startup. Separate jobs require native MuJoCo and native OpenVINO imports, execute their tests and smoke runners, and archive exact dependency versions and verification records. Optional-dependency skips in the lightweight job are not counted as native runtime proof; the native job runs the full stack.
+
+The Tenki tests use a bounded mock transport to prove request binding, non-authority enforcement, failure behavior, receipt ordering and TRANSFORM compatibility. They do **not** claim a live Tenki worker. Live runtime status and latency require the onsite probe.
 
 This is a hackathon integration repository, not a production, safety or legal-compliance certification. The included deterministic vision graph, scripted policy and Cartesian scene are declared fixtures. The next hardware integration replaces them with the selected camera, trained detector, trained VLA and event robot model while preserving the authority boundary.
 
 ## License
 
-MIT. See [LICENSE](LICENSE), identical to the repository root [LICENSE](../LICENSE), and [NOTICE.md](NOTICE.md). MIT covers the code and materials distributed here, not OASSE's separate undistributed proprietary technology.
+MIT. See [LICENSE](LICENSE), identical to the repository root [LICENSE](../LICENSE), and [NOTICE.md](NOTICE.md). MIT covers the code and materials distributed here, not OASSE's separate undistributed proprietary technology or external Tenki/Intel runtimes.
