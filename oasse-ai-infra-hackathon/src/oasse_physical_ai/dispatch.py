@@ -24,6 +24,16 @@ def fingerprint(value: EvidenceFrame | ProposedAction) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _validate_joint_action(value: dict[str, float] | None) -> None:
+    if value is None:
+        return
+    if not isinstance(value, dict) or not 1 <= len(value) <= 64:
+        raise TypeError("joint_action must be a non-empty bounded object")
+    for name, position in value.items():
+        text(name, "joint_action key")
+        number(position, f"joint_action[{name}]")
+
+
 def validate_inputs(evidence: EvidenceFrame, action: ProposedAction | None = None) -> None:
     if not isinstance(evidence, EvidenceFrame):
         raise TypeError("expected EvidenceFrame")
@@ -59,6 +69,7 @@ def validate_inputs(evidence: EvidenceFrame, action: ProposedAction | None = Non
         integer(action.requested_at_ms, "requested_at_ms")
         number(action.speed_mps, "speed_mps", minimum=0)
         trajectory(action.trajectory)
+        _validate_joint_action(action.joint_action)
         if not isinstance(action.metadata, dict):
             raise TypeError("action metadata must be an object")
         snapshot_fields(action)
