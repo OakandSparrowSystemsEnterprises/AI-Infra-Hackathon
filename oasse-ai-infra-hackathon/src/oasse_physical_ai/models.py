@@ -54,7 +54,6 @@ class ProposedAction:
     requested_at_ms: int
     object_id: str = "cube-1"
     trajectory: List[List[float]] = field(default_factory=lambda: [[0.0, 0.0, 0.0], [0.2, 0.0, 0.1]])
-    joint_action: Optional[Dict[str, float]] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     @staticmethod
@@ -71,7 +70,7 @@ class ProposedAction:
         )
 
 
-PHYSICAL_ACTION_FIELDS = ("action_type", "target_bin", "speed_mps", "object_id", "trajectory", "joint_action")
+PHYSICAL_ACTION_FIELDS = ("action_type", "target_bin", "speed_mps", "object_id", "trajectory")
 SPEED_REL_TOL = 1e-9
 
 
