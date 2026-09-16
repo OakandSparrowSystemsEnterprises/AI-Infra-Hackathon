@@ -4,27 +4,41 @@
 
 ### Gatekeeper: Pre-Execution Security for Physical AI
 
-**INTEL® CORE™ ULTRA · OPENVINO™ · ANOMALIB · PHYSICAL AI STUDIO · ROBOTICS AI SUITE**
-
 Built for **AI INFRA SUMMIT 2026** with **lablab.ai** and **Native**.
 
 **Thesis:** Capability proposes. Authority decides. Execution follows authority, not capability.
 
-### The problem
+## The problem
 
-Physical AI is getting fast enough that perception, planning and action can collapse into one machine-speed loop. That loop still needs a separate answer to a basic question: *is this exact action authorized now, using this exact evidence, for this actor and environment?*
+Physical AI can compress perception, planning and actuation into a machine-speed loop. Capability alone does not answer whether this exact actor, using this exact evidence, is authorized to cause this exact physical effect now.
 
-### What we built
+## What we built
 
 ```text
-Intel perception -> evidence -> VLA proposal -> [optional Tenki derived evidence] -> Gatekeeper -> Intel robotics path -> outcome
-                                                       authority=false          |
-                                                                                +-> ALLOW / TRANSFORM / HOLD / DENY
+camera / robot state
+      -> trained ACT proposal
+      -> bounded exact joint command
+      -> pre-execution authority
+      -> ALLOW | TRANSFORM | HOLD | DENY
+      -> controlled SO-101 dispatch
+      -> encoder-observed outcome
 ```
 
-Gatekeeper sits immediately before physical effect. It is independent of the detector, VLA, optional derived-compute plane and robot runtime. Tenki, when enabled, is explicitly non-authoritative and contributes only evidence bound to the exact proposal.
+Optional Tenki-derived evidence can sit before authority, but it is explicitly `authority=false`. It may contribute evidence; it cannot authorize effect.
 
-### The deeper architecture
+## Verified onsite physical proof
+
+On the Intel event machine we verified:
+
+1. **Intel XPU learned policy:** ACT trained and inferred on an Intel Arc B390 through PyTorch XPU.
+2. **Real robot actuation:** the left 12 V SO-101 follower executed a trained-policy joint command with encoder readback.
+3. **DENY means no handoff:** `workspace_clear=false` produced `DENY / WORKSPACE_OCCUPIED` and no physical dispatch.
+4. **ALLOW is exact-bound:** `workspace_clear=true` produced `ALLOW / POLICY_SATISFIED`; the returned authorized action preserved the exact SHA-bound joint command.
+5. **Physical outcome verification:** one ACT-generated action reached `PHYSICALLY_VERIFIED` with before/target/after encoder evidence.
+
+A later governed rollout passed 600 individually authorized physical steps through the authority/execution path without that path collapsing. It reached `MAX_STEPS_REACHED`; it did **not** complete the LEGO task and is not represented as task success.
+
+## The deeper architecture
 
 Authority defines the admissible transition space:
 
@@ -34,38 +48,46 @@ C_I:X_I\rightarrow X_I,
 I(C_I(x))=I(x)=\iota.
 $$
 
-The planner chooses proposals. Optional compute may derive evidence. Authority determines whether the exact transition is executable now.
+The planner chooses proposals. Authority determines whether the proposed transition is executable. The invariant constrains action; it does not pretend to be the planner.
 
-### The five core proof points
+## Intel fit
 
-1. **Fresh valid action:** ALLOW and execute.
-2. **Overspeed action:** TRANSFORM and execute only the constrained replacement.
-3. **Stale evidence:** HOLD with zero new movement.
-4. **Authority unavailable:** HOLD instead of bypassing governance.
-5. **Receipts:** bind observation, proposal, authority decision, dispatch and observed result.
+The verified onsite stack includes:
 
-If the current Tenki runtime is live, show an additional supporting proof: the exact evidence/action artifact receives a `claim_hash` with `authority=false`, and that `PRE_AUTHORITY_EVIDENCE` receipt precedes the Gatekeeper decision. Do not show historical Tenki runtime evidence as if it came from the current event run.
+- **Intel Arc B390 / PyTorch XPU** for ACT training and inference;
+- **OpenVINO 2026.3** runtime bring-up;
+- **LeRobot 0.6.1** ACT + SO-101 control;
+- the Intel Physical AI Studio ecosystem as the event workflow context.
 
-### Why it matters
+The MVTec PaDiM/OpenVINO artifact was runtime/integration bring-up evidence, **not** a LEGO detector. Robotics AI Suite is not claimed as independently verified in the final physical path.
 
-Monitoring after the fact cannot prevent an unauthorized state transition. Model alignment alone does not establish actor-specific, time-specific execution authority. Robot capability alone does not answer whether the action is permitted. Derived compute alone does not answer it either. Gatekeeper makes authorization a first-class infrastructure layer.
+## Why it matters
 
-### **Intel fit**
+Monitoring after execution cannot prevent an unauthorized state transition. The authority boundary is placed immediately before physical effect. The system therefore distinguishes:
 
-**OPENVINO** accelerates inference and is already verified in the native software rehearsal. **ANOMALIB**, **PHYSICAL AI STUDIO**, **ROBOTICS AI SUITE** and **INTEL CORE ULTRA** are surfaced explicitly when their onsite use is actually verified. Gatekeeper governs the final transition from proposed action to physical effect without requiring a specific model family.
+- what the model proposes;
+- what the robot can physically do;
+- what is authorized to execute;
+- what actually happened afterward.
 
-### Tenki fit
+## Current task boundary
 
-Tenki is optional isolated compute before authority. The adapter hashes the exact proposal/evidence artifact and accepts only a bounded claim that binds back to that artifact, requested effect and principal while explicitly remaining `authority=false`. It cannot return an executable verdict or authorized action. The default `TENKI_MODE=off` preserves the original path; `observe` adds evidence opportunistically; `required` fails closed before Gatekeeper when the declared evidence requirement is not met.
+The original ten-episode imitation dataset contained significant idle data. Offline analysis isolated the strongest manipulation/gripper signal in episodes `5,6,8,9`. A clean ACT retrain uses only those episodes with shorter replanning intervals.
 
-### Reproducibility
+**Not yet claimed:** autonomous end-to-end LEGO pick-and-drop success.
 
-The repository includes native OpenVINO + native MuJoCo rehearsal, deterministic failure scenarios, CI, evidence bundles, receipt verification, Tenki contract tests and onsite integration tooling. Hardware-specific and live-Tenki claims remain false until verified onsite.
+## Reproducibility and evidence
 
-### IP and licensing
+The repository contains the parameterized ACT/SO-101 runners, dataset-analysis tooling, checkpoint inspection, native OpenVINO/MuJoCo rehearsal, deterministic authority tests, CI, and the onsite evidence manifest.
 
-The LabLab repository is greenfield MIT code. External runtimes remain separately licensed dependencies. Proprietary Gatekeeper production source and policy corpus are not distributed; the live service is reached through the repository's MIT HTTP adapter. Tenki platform source is not vendored.
+See:
 
-### What to watch in the demo
+- `docs/ONSITE_ACT_LEGO.md`
+- `docs/ONSITE_EVIDENCE.md`
+- `docs/ONSITE_REVIEW_CHECKLIST.md`
 
-Watch the stale-evidence case. Nothing else is broken: OpenVINO still works, the planner still proposes and the actuator is still capable. The system stops because the evidence is no longer current enough to justify the physical transition. That is the authority boundary made visible.
+Raw datasets, model weights, camera frames, calibration files and credentials remain local/generated artifacts and are not committed.
+
+## IP and claim boundary
+
+The repository is greenfield MIT integration code. The onsite authority was the repository `ReferenceAuthorityEngine` behind the HTTP pre-execution boundary, not the separate proprietary production Gatekeeper runtime. Production Gatekeeper source and policy corpus are not distributed.
