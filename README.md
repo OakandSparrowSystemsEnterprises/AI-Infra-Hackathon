@@ -68,14 +68,15 @@ The repository's verified onsite authority was `ReferenceAuthorityEngine` behind
 - [Onsite ACT + SO-101 handoff](oasse-ai-infra-hackathon/docs/ONSITE_ACT_LEGO.md)
 - [Onsite evidence manifest](oasse-ai-infra-hackathon/docs/ONSITE_EVIDENCE.md)
 - [Onsite review checklist](oasse-ai-infra-hackathon/docs/ONSITE_REVIEW_CHECKLIST.md)
+- [Senior engineer onsite addendum](oasse-ai-infra-hackathon/docs/SENIOR_ENGINEER_ONSITE_ADDENDUM.md)
 - [Judge one-pager](oasse-ai-infra-hackathon/docs/JUDGE_ONE_PAGER.md)
 - [Final demo script](oasse-ai-infra-hackathon/docs/DEMO_SCRIPT_FINAL.md)
 - [Final project draft](oasse-ai-infra-hackathon/docs/FINAL_DRAFT.md)
-- [Senior engineer architecture review](oasse-ai-infra-hackathon/docs/SENIOR_ENGINEER_ARCHITECTURE.md)
+- [Senior engineer architecture review — architectural baseline; read the onsite addendum first](oasse-ai-infra-hackathon/docs/SENIOR_ENGINEER_ARCHITECTURE.md)
 - [Authority invariant architecture](oasse-ai-infra-hackathon/docs/AUTHORITY_INVARIANT.md)
 - [Application README](oasse-ai-infra-hackathon/README.md)
 
-Historical/pre-onsite planning documents are retained only for provenance and should not override the current onsite handoff.
+Historical/pre-onsite planning documents are retained only for provenance and should not override the current onsite handoff or addendum.
 
 ## Reusable physical runners
 
