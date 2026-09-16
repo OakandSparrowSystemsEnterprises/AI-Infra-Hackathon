@@ -59,7 +59,7 @@ Verified onsite:
 - OpenVINO 2026.3 runtime/integration bring-up;
 - LeRobot 0.6.1 SO-101 path.
 
-Physical AI Studio is part of the event workflow/ecosystem. The MVTec PaDiM/OpenVINO artifact was runtime/integration bring-up evidence, **not** a LEGO detector. Robotics AI Suite is not claimed as independently verified in the final physical path.
+Physical AI Studio is part of the event workflow/ecosystem. The **Anomalib / MVTec PaDiM / OpenVINO** artifact was runtime/integration bring-up evidence, **not** a LEGO detector. Robotics AI Suite is not claimed as independently verified in the final physical path.
 
 The repository's verified onsite authority was `ReferenceAuthorityEngine` behind the HTTP pre-execution boundary. It is **not** represented as the separate proprietary production Gatekeeper runtime.
 
