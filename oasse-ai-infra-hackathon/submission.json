@@ -16,7 +16,7 @@
     "pipeline": "Observe -> Propose -> Derive evidence when configured -> Project into the admissible state space -> Execute -> Prove",
     "discipline": "The invariant constrains admissible transitions; it does not uniquely choose the optimal next action or claim GOI validation. Tenki-derived evidence is non-authoritative and does not alter this invariant."
   },
-  "sponsor_story": "Intel supplies the physical-AI capability surface: edge execution, inference and robotics tooling. Gatekeeper supplies the independent authority surface. The demo makes Intel's contribution visible through runtime/device evidence, inference output and the physical-AI execution path rather than only listing sponsor technologies.",
+  "sponsor_story": "Intel supplies the physical-AI capability surface: edge execution, inference and robotics tooling. Gatekeeper supplies the independent authority surface. The onsite evidence includes Intel XPU ACT training/inference, OpenVINO runtime bring-up and real SO-101 execution behind the pre-execution authority boundary.",
   "architecture": [
     "camera/sensor evidence",
     "Intel/OpenVINO perception -> EvidenceFrame",
@@ -34,17 +34,18 @@
     "stale evidence -> HOLD -> zero new movement",
     "authority unavailable -> HOLD -> no actuator call",
     "replayed evidence -> HOLD",
+    "workspace occupied on real SO-101 path -> DENY -> no physical handoff",
+    "trained ACT action on real SO-101 path -> ALLOW -> exact bound command -> encoder-verified movement",
     "normal object -> accept destination",
     "defective object evidence -> reject proposal may remain admissible and receive ALLOW",
     "optional Tenki claim -> exact proposal artifact/effect/principal binding with authority=false before Gatekeeper"
   ],
   "intel_stack": [
-    "Intel Core Ultra (onsite target)",
-    "OpenVINO (native software rehearsal verified; runtime/device shown in sponsor evidence)",
-    "Anomalib (onsite trained-export target; score/localization should be shown when verified)",
-    "Physical AI Studio (onsite target; workflow role should be shown when verified)",
-    "Robotics AI Suite (onsite target; robot runtime role should be shown when verified)",
-    "LeRobot/event VLA path (onsite target)"
+    "Intel Arc B390 GPU via PyTorch XPU (ACT training/inference verified onsite)",
+    "OpenVINO 2026.3 runtime (verified onsite; MVTec PaDiM artifact used only for runtime/integration bring-up)",
+    "LeRobot 0.6.1 ACT + SO-101 follower path (verified onsite)",
+    "Physical AI Studio ecosystem/workflow (used as event tooling context; autonomous task completion not yet claimed)",
+    "Robotics AI Suite role not independently verified in the final physical path"
   ],
   "tenki_integration": {
     "role": "optional isolated pre-authority derived evidence",
@@ -53,32 +54,32 @@
     "supported_modes": ["off", "observe", "required"],
     "contract": "POST /derive with artifact_ref, artifact_sha256, requested_effect and principal; accepted claim must remain authority=false and bind exactly to those values",
     "live_runtime_verified": false,
-    "activation": "Run scripts/probe_tenki.py onsite, use observe first, promote to required only when live latency is stable inside the evidence freshness budget"
+    "activation": "Run scripts/probe_tenki.py, use observe first, promote to required only when live latency is stable inside the evidence freshness budget"
   },
   "event_ecosystem": [
     "AI Infra Summit",
     "lablab.ai",
     "Native"
   ],
-  "sponsor_evidence": "Run scripts/sponsor_showcase.py --output onsite/sponsor-runtime.json and include the output with final onsite evidence. If Tenki is enabled, separately run scripts/probe_tenki.py --output onsite/tenki-probe.json and preserve the resulting PRE_AUTHORITY_EVIDENCE receipt.",
+  "sponsor_evidence": "Use docs/ONSITE_EVIDENCE.md and docs/ONSITE_ACT_LEGO.md for the verified physical-AI evidence. If Tenki is enabled, separately run scripts/probe_tenki.py and preserve the resulting PRE_AUTHORITY_EVIDENCE receipt.",
   "license": "MIT",
   "greenfield": true,
   "provenance": "See GREENFIELD.md and PROVENANCE.json. No external tutorial source, assets, notebooks, weights or Tenki platform source are vendored.",
-  "status": "final draft software submission; onsite hardware, live Tenki runtime and production-service evidence pending",
-  "verified_by": "Run scripts/check_greenfield.py, scripts/check_submission_draft.py and scripts/rehearse_submission.py --profile native against the exact commit used for evidence.",
+  "status": "onsite hardware and one governed trained-ACT physical step verified; full autonomous LEGO pick-and-drop, live Tenki runtime and production Gatekeeper evidence remain pending",
+  "verified_by": "Run scripts/check_greenfield.py, scripts/check_submission_draft.py and scripts/rehearse_submission.py --profile native against the exact commit used for evidence; see docs/ONSITE_EVIDENCE.md for physical-event proof hashes.",
   "submission_fields": {
     "demo_video_url": null,
     "judge_repository_url": null,
     "final_commit": null
   },
   "boundaries": {
-    "hardware_tested": false,
+    "hardware_tested": true,
     "trained_detector_verified": false,
-    "trained_vla_verified": false,
+    "trained_vla_verified": true,
     "production_gatekeeper_verified": false,
     "live_tenki_verified": false,
     "physical_robot_safe_interruption_verified": false,
-    "grip": "idealized Cartesian suction weld in software rehearsal, not an onsite robot claim"
+    "grip": "real SO-101 learned-policy actuation is verified, but autonomous grasp-and-drop task success is not yet verified"
   },
   "offline_demo": "inspection/index.html in the native rehearsal evidence package",
   "submission_sent": false
