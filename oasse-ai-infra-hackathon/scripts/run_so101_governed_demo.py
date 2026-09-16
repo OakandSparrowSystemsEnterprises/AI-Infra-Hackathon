@@ -14,8 +14,16 @@ from oasse_physical_ai.providers.so101 import SO101Actuator, connect_event_so101
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run DENY/ALLOW proof on a calibrated SO-101 follower.")
-    parser.add_argument("--port", default="/dev/ttyACM0")
-    parser.add_argument("--robot-id", default="hack_follower")
+    parser.add_argument(
+        "--port",
+        required=True,
+        help="Explicit follower serial device path; prefer /dev/serial/by-id/... over /dev/ttyACM*.",
+    )
+    parser.add_argument(
+        "--robot-id",
+        required=True,
+        help="Exact local LeRobot calibration ID for the physical follower.",
+    )
     parser.add_argument("--target-pan", type=float, required=True)
     parser.add_argument("--max-delta-deg", type=float, default=60.0)
     parser.add_argument("--output", default="onsite/so101-governed-proof.json")
