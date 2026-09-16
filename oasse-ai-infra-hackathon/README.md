@@ -8,9 +8,29 @@ The conceptual model is an invariant-preserving transition system: authority def
 
 The default service runs synthetic perception, a scripted proposal generator, the local reference authority engine and a simulated actuator. It provides a lightweight dashboard and API without requiring OpenVINO, MuJoCo, Tenki or robot hardware.
 
-The native simulation path uses actual MuJoCo dynamics in an independently authored three-axis Cartesian carrier scene. The native vision path adds rendered RGB frames and a real compiled OpenVINO IR graph before authority evaluation and controlled physics execution. Its included graph compares pixels against a reference image; it is not a trained anomaly model. Workspace and geometry context are explicitly labeled simulator ground truth. Neither path is an SO-101 or bimanual grasp-and-sort demonstration.
+The native simulation path uses actual MuJoCo dynamics in an independently authored three-axis Cartesian carrier scene. The native vision path adds rendered RGB frames and a real compiled OpenVINO IR graph before authority evaluation and controlled physics execution. Its included graph compares pixels against a reference image; it is not a trained anomaly model. Workspace and geometry context are explicitly labeled simulator ground truth.
 
 An optional Tenki path adds isolated, non-authoritative derived evidence between proposal and Gatekeeper. It is OFF by default, so existing behavior and latency remain unchanged. See [Tenki Integration](docs/TENKI_INTEGRATION.md).
+
+### Onsite ACT + SO-101 hardware path
+
+The Intel onsite integration adds a real SO-101 follower and an ACT imitation-learning policy trained on the event workstation's Intel Arc XPU. The reusable runners are parameterized and live under `scripts/`; raw event-machine proofs, model weights, calibration files, datasets, frames and receipts remain generated/local artifacts.
+
+What was physically demonstrated onsite:
+
+- corrected leader/follower hardware identity and calibration
+- real SO-101 teleoperation and encoder readback
+- ACT training and inference on Intel Arc B390 through PyTorch XPU
+- a fresh learned six-joint action bounded by a deterministic motion envelope
+- exact SHA-256 binding of the bounded joint action to evidence/action identities
+- `DENY / WORKSPACE_OCCUPIED` with no physical handoff
+- `ALLOW / POLICY_SATISFIED` with exact authorized joint-action binding preserved
+- one ACT-generated authority-approved physical step with encoder verification and status `PHYSICALLY_VERIFIED`
+- a 600-step governed closed-loop execution-path run without an authority/actuator-path collapse
+
+The 600-step run did **not** complete the LEGO manipulation task. Dataset analysis showed the first mixed-data ACT model had learned a hold attractor because several recorded episodes were idle or had little gripper signal. Clean retraining was started from the strongest manipulation episodes `[5,6,8,9]`; full autonomous LEGO pick-and-drop was still pending at handoff.
+
+See [Onsite ACT + SO-101 Handoff](docs/ONSITE_ACT_LEGO.md) and [Onsite Evidence Manifest](docs/ONSITE_EVIDENCE.md). The onsite HTTP authority used `ReferenceAuthorityEngine`; it is not represented as the proprietary production Gatekeeper runtime.
 
 See [Architecture](docs/ARCHITECTURE.md), [Phase 2 runtime](docs/PHASE2_RUNTIME.md), [Phase 3 native perception](docs/PHASE3_NATIVE_PERCEPTION.md), and [Jackson's perception handoff](docs/JACKSON_PERCEPTION.md) for exact boundaries and integration instructions.
 
@@ -98,7 +118,7 @@ CI tests the lightweight Python path, reference scenarios, Tenki contract/bindin
 
 The Tenki tests use a bounded mock transport to prove request binding, non-authority enforcement, failure behavior, receipt ordering and TRANSFORM compatibility. They do **not** claim a live Tenki worker. Live runtime status and latency require the onsite probe.
 
-This is a hackathon integration repository, not a production, safety or legal-compliance certification. The included deterministic vision graph, scripted policy and Cartesian scene are declared fixtures. The next hardware integration replaces them with the selected camera, trained detector, trained VLA and event robot model while preserving the authority boundary.
+This is a hackathon integration repository, not a production, safety or legal-compliance certification. The included deterministic vision graph, scripted policy and Cartesian scene are declared fixtures. The onsite hardware path demonstrates real learned-policy SO-101 actuation under the same pre-execution authority boundary, while the final autonomous LEGO task remains separately tracked until it is actually completed.
 
 ## License
 
