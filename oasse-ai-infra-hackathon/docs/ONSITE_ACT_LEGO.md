@@ -73,6 +73,8 @@ for dev in sorted(glob.glob('/dev/video*'), key=lambda x: int(re.search(r'\d+$',
 PY
 ```
 
+Both governed ACT runners accept either a numeric camera index or a device path through `--camera` (`--camera-index` remains an alias).
+
 ## Reusable repository runners
 
 The repository contains tracked, parameterized scripts rather than the event machine's scratch files:
@@ -89,13 +91,34 @@ python scripts/run_act_governed_single_step.py \
   --policy-dir /path/to/pretrained_model \
   --robot-port /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B79018350-if00 \
   --robot-id lego_follower_350 \
-  --camera-index 12 \
+  --camera /dev/video1 \
+  --device xpu \
   --workspace-clear \
   --execute \
   --output /tmp/act-governed-step.json
 ```
 
-The camera index above is illustrative. Probe the current machine first.
+The camera path above is illustrative. Probe the current machine first.
+
+For the clean retrain, derive state/action guard ranges from the same episode subset used for training:
+
+```bash
+python scripts/run_act_governed_rollout.py \
+  --policy-dir /path/to/pretrained_model \
+  --dataset-root "$HOME/Downloads/lego_pick_bowl_dataset" \
+  --dataset-episodes 5,6,8,9 \
+  --robot-port /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B79018350-if00 \
+  --robot-id lego_follower_350 \
+  --camera /dev/video1 \
+  --device xpu \
+  --workspace-clear \
+  --execute \
+  --output /tmp/act-governed-rollout.json
+```
+
+`--dataset-episodes` is important for the clean-v2 model: the rollout's state and action range guards are calculated from the selected episodes rather than from the contaminated ten-episode pool.
+
+The rollout does not infer task success. `MAX_STEPS_REACHED` is an incomplete run and exits non-zero; `OPERATOR_ABORT` is also an incomplete run. A full autonomous success claim requires separate visible task-completion evidence plus the governed proof record.
 
 ## Clean retraining configuration
 
@@ -135,3 +158,5 @@ Do not overstate the onsite result:
 - Not yet proven at handoff: autonomous end-to-end LEGO pick-and-drop success.
 - The MVTec PaDiM artifact used earlier was an OpenVINO runtime/integration bring-up model, not a LEGO detector.
 - The onsite HTTP authority was the repository `ReferenceAuthorityEngine`, not production Gatekeeper.
+
+See `ONSITE_REVIEW_CHECKLIST.md` before another physical run.

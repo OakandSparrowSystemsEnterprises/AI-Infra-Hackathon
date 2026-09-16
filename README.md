@@ -2,52 +2,26 @@
 
 ## **INTEL® PHYSICAL AI CHALLENGE**
 
-### **INTEL® CORE™ ULTRA · OPENVINO™ · ANOMALIB · PHYSICAL AI STUDIO · ROBOTICS AI SUITE**
-
 Built for **AI INFRA SUMMIT 2026** with the **lablab.ai** and **Native** hackathon ecosystem.
 
 > **Capability proposes. Authority decides. Execution follows authority, not capability.**
 
-Oak & Sparrow Systems Enterprise LLC built a greenfield MIT-licensed authority layer for Physical AI. **INTEL** supplies the capability surface that makes the challenge interesting: edge compute, accelerated inference and robotics tooling. Gatekeeper adds the independent machine-speed authority boundary immediately before physical effect. **Tenki** can optionally supply isolated, non-authoritative derived evidence about the exact proposal before Gatekeeper evaluates it.
+Oak & Sparrow Systems Enterprise LLC built a greenfield MIT-licensed integration that inserts an independent machine-speed authority boundary immediately before physical effect.
 
 ```text
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                         INTEL PHYSICAL AI STACK                              │
-│  Core Ultra -> OpenVINO -> Anomalib -> Physical AI / VLA -> Robotics       │
-└──────────────────────────────────────┬───────────────────────────────────────┘
-                                       │ EvidenceFrame + ProposedAction
-                                       v
-                         ┌───────────────────────────┐
-                         │ TENKI DERIVED EVIDENCE    │
-                         │ optional isolated compute │
-                         │ authority = false         │
-                         └─────────────┬─────────────┘
-                                       │ exact artifact + claim
-                                       v
-                         ┌───────────────────────────┐
-                         │ GATEKEEPER AUTHORITY      │
-                         │ exact actor + evidence    │
-                         │ exact action + time       │
-                         │ ALLOW / TRANSFORM         │
-                         │ HOLD / DENY               │
-                         └─────────────┬─────────────┘
-                                       │ AuthorizedAction only
-                                       v
-┌──────────────────────────────────────┴───────────────────────────────────────┐
-│                    CONTROLLED PHYSICAL EXECUTION                            │
-│          robot command -> observed outcome -> chained receipts              │
-└──────────────────────────────────────────────────────────────────────────────┘
+camera + robot state
+        -> perception / learned policy
+        -> ProposedAction
+        -> optional derived evidence (authority=false)
+        -> pre-execution authority
+        -> ALLOW | TRANSFORM | HOLD | DENY
+        -> controlled physical execution
+        -> observed outcome / receipts
 ```
 
-Tenki is **not** an authority layer. With Tenki disabled, the original path is unchanged. With it enabled, Tenki derives a bounded claim about the SHA-256-bound evidence/action artifact, and Gatekeeper remains the sole authority source.
+The planner and robot retain capability. They do not grant themselves execution authority.
 
-The deeper architecture treats authority as an **admissible transition space**, not merely a rule checked after planning:
-
-```text
-Observe -> Propose -> Project into the admissible state space -> Execute -> Prove
-```
-
-with the compact invariant
+The deeper architecture treats authority as an admissible transition space:
 
 ```math
 C_I:X_I\rightarrow X_I
@@ -55,47 +29,86 @@ C_I:X_I\rightarrow X_I
 I(C_I(x))=I(x)=\iota.
 ```
 
+The invariant constrains what may execute; it does not pretend to be the planner.
+
+## Current verified state
+
+The September 15 Intel onsite session moved the project beyond software-only rehearsal.
+
+Verified on the event hardware:
+
+- **Intel Arc B390 / PyTorch XPU** ACT training and inference;
+- **LeRobot 0.6.1** ACT + SO-101 control;
+- real left 12 V SO-101 follower actuation with encoder readback;
+- explicit `DENY / WORKSPACE_OCCUPIED` with **no physical handoff**;
+- explicit `ALLOW / POLICY_SATISFIED` with exact SHA-bound joint-command preservation;
+- one ACT-generated physical action with proof status **`PHYSICALLY_VERIFIED`**;
+- a 600-step governed authority/execution-path run without path collapse.
+
+The 600-step run reached `MAX_STEPS_REACHED` and did **not** complete the LEGO task. It is execution-path evidence, not task-success evidence.
+
+The first ten imitation episodes mixed idle and manipulation data. Offline analysis isolated episodes `5,6,8,9` as the strongest manipulation/gripper set. Clean-v2 ACT retraining uses those episodes with shorter replanning intervals.
+
+**Pending:** full autonomous LEGO pick-and-drop proof.
+
+## Intel / Physical AI stack claim boundary
+
+Verified onsite:
+
+- Intel Arc B390 XPU for ACT;
+- OpenVINO 2026.3 runtime/integration bring-up;
+- LeRobot 0.6.1 SO-101 path.
+
+Physical AI Studio is part of the event workflow/ecosystem. The **Anomalib / MVTec PaDiM / OpenVINO** artifact was runtime/integration bring-up evidence, **not** a LEGO detector. Robotics AI Suite is not claimed as independently verified in the final physical path.
+
+The repository's verified onsite authority was `ReferenceAuthorityEngine` behind the HTTP pre-execution boundary. It is **not** represented as the separate proprietary production Gatekeeper runtime.
+
 ## Read this first
 
-- [Senior engineer architecture review](oasse-ai-infra-hackathon/docs/SENIOR_ENGINEER_ARCHITECTURE.md)
-- [Final logic and hardening review](oasse-ai-infra-hackathon/docs/FINAL_LOGIC_REVIEW.md)
-- [Final project draft](oasse-ai-infra-hackathon/docs/FINAL_DRAFT.md)
-- [Authority invariant architecture](oasse-ai-infra-hackathon/docs/AUTHORITY_INVARIANT.md)
-- [Tenki pre-authority integration](oasse-ai-infra-hackathon/docs/TENKI_INTEGRATION.md)
-- [Sponsor showcase strategy](oasse-ai-infra-hackathon/docs/SPONSOR_SHOWCASE.md)
-- [Onsite sponsor binding kit](oasse-ai-infra-hackathon/docs/ONSITE_SPONSOR_BINDING.md)
-- [Focused onsite entry plan](oasse-ai-infra-hackathon/docs/ONSITE_ENTRY_PLAN.md)
+- [Onsite ACT + SO-101 handoff](oasse-ai-infra-hackathon/docs/ONSITE_ACT_LEGO.md)
+- [Onsite evidence manifest](oasse-ai-infra-hackathon/docs/ONSITE_EVIDENCE.md)
+- [Onsite review checklist](oasse-ai-infra-hackathon/docs/ONSITE_REVIEW_CHECKLIST.md)
+- [Senior engineer onsite addendum](oasse-ai-infra-hackathon/docs/SENIOR_ENGINEER_ONSITE_ADDENDUM.md)
 - [Judge one-pager](oasse-ai-infra-hackathon/docs/JUDGE_ONE_PAGER.md)
 - [Final demo script](oasse-ai-infra-hackathon/docs/DEMO_SCRIPT_FINAL.md)
-- [Tomorrow onsite runbook](oasse-ai-infra-hackathon/docs/TOMORROW_ONSITE.md)
+- [Final project draft](oasse-ai-infra-hackathon/docs/FINAL_DRAFT.md)
+- [Senior engineer architecture review — architectural baseline; read the onsite addendum first](oasse-ai-infra-hackathon/docs/SENIOR_ENGINEER_ARCHITECTURE.md)
+- [Authority invariant architecture](oasse-ai-infra-hackathon/docs/AUTHORITY_INVARIANT.md)
 - [Application README](oasse-ai-infra-hackathon/README.md)
 
-## **Sponsor-visible proof**
+Historical/pre-onsite planning documents are retained only for provenance and should not override the current onsite handoff or addendum.
 
-**INTEL** is the challenge sponsor, so Intel technology is visible in the proof rather than buried in setup. The software rehearsal already verifies native compiled **OPENVINO** inference. Onsite, the demo is designed to show the actual OpenVINO runtime/device, **ANOMALIB** anomaly evidence when the trained workflow is verified, and the real role of **PHYSICAL AI STUDIO** and **ROBOTICS AI SUITE** when those event components are bound.
+## Reusable physical runners
 
-Run `python scripts/sponsor_showcase.py --output onsite/sponsor-runtime.json` from the application directory to generate a non-actuating sponsor-runtime record. It records runtime facts without converting package presence into an unearned hardware or trained-model claim.
+From `oasse-ai-infra-hackathon`:
 
-**AI INFRA SUMMIT**, **lablab.ai** and **Native** are credited prominently as the event/hackathon ecosystem. Event-level Diamond Partners are recognized in the sponsor document without implying that every event sponsor is part of this project's technical dependency graph.
+```text
+scripts/analyze_lerobot_dataset.py
+scripts/check_act_checkpoint.py
+scripts/run_act_governed_single_step.py
+scripts/run_act_governed_rollout.py
+```
 
-## Tenki proof boundary
+The physical runners require explicit robot identity and execution interlocks. The rollout can derive state/action guard ranges from the same episode subset used for training, e.g. `--dataset-episodes 5,6,8,9`.
 
-The repository now includes a fully wired but default-off Tenki pre-authority path. `TENKI_MODE=observe` records a valid claim when available without making Tenki a dependency. `TENKI_MODE=required` fails closed before Gatekeeper if the declared Tenki evidence requirement is not satisfied. `TENKI_MODE=off` preserves the original architecture and latency path.
+`MAX_STEPS_REACHED` and `OPERATOR_ABORT` are incomplete runs, not successful task exits.
 
-The Tenki client uses the already-established OASSE `/derive` contract: exact artifact reference, digest, requested effect and principal. It rejects any response that attempts to assert authority, rebind the artifact, or supply an unbound claim. A successful result is sealed as `PRE_AUTHORITY_EVIDENCE` before the Gatekeeper decision receipt.
+## Software rehearsal
 
-The code/contract is CI-tested. **A live Tenki worker and current event latency are not claimed until the onsite `/derive` probe is run and recorded.**
+The repository also contains a reproducible native OpenVINO + MuJoCo rehearsal covering deterministic authority scenarios including ALLOW, TRANSFORM, HOLD, DENY, stale/replayed evidence, authority outage and receipt verification.
 
-## Current proof
+Simulation, physical hardware and production-service claims remain separately labeled.
 
-The reproducible software rehearsal demonstrates native OpenVINO inference, native MuJoCo dynamics, normal/defective routing, transformed motion, stale/replayed evidence holds, authority-outage fail-closed behavior, post-action verification and chained receipts.
+## Tenki boundary
 
-A detected defect does not automatically equal an authority violation. **Perception supplies facts; authority determines admissibility.** Likewise, the authority invariant constrains what may execute but does not claim to choose the uniquely optimal action.
+Tenki is optional isolated pre-authority compute. A valid claim must remain `authority=false` and bind to the exact artifact/effect/principal. Tenki does not return an executable verdict or authorized action.
 
-The software rehearsal intentionally labels its detector, planner and grip as reference components. Onsite hardware, trained Anomalib/VLA use, live Tenki runtime evidence and production Gatekeeper are upgraded from *pending* only after evidence from the actual run exists.
+The adapter/contract is tested, but a current live Tenki worker is not claimed unless a fresh event probe supports it.
 
-## Greenfield MIT boundary
+## Greenfield MIT / IP boundary
 
-Everything authored and committed in this LabLab repository is greenfield MIT project code. External runtimes remain separately licensed dependencies and are not vendored or relicensed here. Proprietary Gatekeeper production source remains outside the repository behind the MIT-licensed adapter boundary. Tenki is consumed only through its external runtime/API boundary; no Tenki platform source is vendored here.
+Everything authored and committed in this repository is greenfield MIT project code. External runtimes remain separately licensed dependencies and are not vendored or relicensed here.
+
+Proprietary Gatekeeper production source, policy corpus, credentials and private infrastructure remain outside this repository behind the integration/API boundary.
 
 See [GREENFIELD.md](GREENFIELD.md), [PROVENANCE.json](oasse-ai-infra-hackathon/PROVENANCE.json), [LICENSE](LICENSE) and [NOTICE](oasse-ai-infra-hackathon/NOTICE.md).

@@ -16,46 +16,40 @@ Intel Physical AI Challenge
 
 **Capability proposes. Authority decides. Execution follows authority, not capability.**
 
+## Current status
+
+The project has moved beyond software-only rehearsal. The September 15 onsite session verified a trained ACT policy on Intel XPU, real SO-101 actuation, an explicit DENY/no-handoff case, an ALLOW with exact command binding, and encoder-observed physical convergence for one learned-policy action.
+
+Full autonomous LEGO pick-and-drop is **not yet claimed**. The first ten-episode imitation dataset contained substantial idle/weak data; clean-v2 retraining uses episodes `5,6,8,9` with shorter replanning intervals.
+
 ## Problem
 
 Physical-AI systems are becoming fast enough to perceive, plan and act with very little human friction. That speed creates a missing control boundary. A model may be capable of generating a movement, and a robot may be technically capable of executing it, without that movement being authorized for the current actor, evidence, environment, timing or policy state.
 
-Most safety and governance approaches observe, log or filter around the model. This project places an independent deterministic authority decision immediately before physical effect. The execution path therefore distinguishes *what the system can do* from *what it is permitted to do now*.
+This project places an independent deterministic authority decision immediately before physical effect. The execution path therefore distinguishes *what the system can do* from *what it is permitted to do now*.
 
 ## Solution
 
-The integration uses a strict sequence:
-
 ```text
-camera / sensor evidence
-  -> perception
-  -> EvidenceFrame
-  -> VLA / planner proposal
-  -> ProposedAction
-  -> Gatekeeper authority
+camera / robot state
+  -> evidence
+  -> trained ACT / planner proposal
+  -> bounded ProposedAction
+  -> pre-execution authority
   -> ALLOW | TRANSFORM | HOLD | DENY
   -> controlled actuator
-  -> outcome observation
-  -> chained receipts
+  -> observed physical result
+  -> chained evidence / receipts
 ```
 
-The planner never grants itself permission. Gatekeeper evaluates the exact evidence/action pair and returns one of four outcomes:
+The planner never grants itself permission. Authority evaluates the exact evidence/action pair. HOLD and DENY do not dispatch. ALLOW authorizes the exact proposal. TRANSFORM requires an explicitly authorized physical replacement.
 
-- **ALLOW**: execute the proposal exactly as submitted.
-- **TRANSFORM**: execute only the explicitly authorized physical replacement.
-- **HOLD**: do not execute; wait for better evidence, restored authority or another required condition.
-- **DENY**: do not execute because policy or identity state rejects the transition.
-
-The final dispatch gate independently checks binding, evidence age, replay state, scene state and receipt integrity before allowing an actuator call.
-
-## Deeper mathematical architecture
-
-The stronger formulation is that authority defines the admissible state space rather than merely checking a rule after planning.
+## Mathematical architecture
 
 Let `I` be the governing invariant and `\iota` the value that must survive execution:
 
 $$
-\boxed{I(x_{n+1})=I(x_n)=\iota}.
+I(x_{n+1})=I(x_n)=\iota.
 $$
 
 Define
@@ -64,162 +58,155 @@ $$
 X_I=\{x\in X:I(x)=\iota\}.
 $$
 
-Then an executable controlled transition must remain inside that set:
+An executable controlled transition must remain inside that set:
 
 $$
-\boxed{C_I:X_I\rightarrow X_I}.
+C_I:X_I\rightarrow X_I.
 $$
 
-This gives the whole build a compact architectural description:
-
-```text
-Observe -> Propose -> Project into the admissible state space -> Execute -> Prove
-```
-
-The current Gatekeeper verdicts are the operational realization of that projection. ALLOW preserves an admissible proposal. TRANSFORM substitutes an explicitly authorized admissible action. HOLD/DENY produce no executable transition.
-
-Two distinctions matter. First, **perception supplies facts while authority determines admissibility**. A detected defect can still lead to an allowed reject-route action. Second, **the invariant is not the planner**. It constrains what may happen but does not claim to choose the uniquely optimal action among all admissible choices.
-
-The Asimov connection is therefore structural rather than literary: instead of merely asking the robot to remember a linguistic law, the architecture attempts to restrict its executable transition space. This is an engineering formulation, not a claim that ethics have been solved mathematically.
-
-The detailed formulation, including the GOI methodological analogy and explicit non-theorem treatment of the original whiteboard notation, is in [AUTHORITY_INVARIANT.md](AUTHORITY_INVARIANT.md).
+The planner chooses proposals; authority constrains which proposals may become effects. The invariant is not the planner and does not claim to choose the uniquely optimal action.
 
 ## Why this is different
 
-The novelty is not another VLA, anomaly detector or robot rule set. The contribution is an explicit machine-speed authority layer between proposal and effect.
+The contribution is an explicit machine-speed authority layer between proposal and effect. That produces visible properties:
 
-That distinction produces several properties that are visible in the demo:
+1. A learned policy can propose while authority still denies physical handoff.
+2. The exact authorized action can be cryptographically bound to the evidence/action identity before dispatch.
+3. A blocked command never needs to reach the actuator.
+4. Physical execution can be compared against encoder-observed outcome rather than inferred from a send call.
+5. Simulation/reference scenarios additionally exercise TRANSFORM, stale evidence, replay and authority-unavailable fail-closed behavior.
 
-1. A valid-looking action can still be stopped because its evidence is stale.
-2. An overspeed proposal can be transformed into a constrained authorized action without allowing the original command to slip through.
-3. An unavailable authority service fails closed instead of falling back to ungoverned execution.
-4. Replayed evidence cannot be used to authorize another physical effect.
-5. The system records what was observed, what was proposed, what was authorized, what was dispatched and what was observed afterward.
+## Verified onsite hardware proof
 
-## Sponsor showcase: Intel should be visible in the proof
+The Intel event machine verified:
 
-Intel is not treated as a logo or a package dependency in this project. The sponsor story is part of the architecture and live demonstration.
+- LeRobot 0.6.1 robot-control path;
+- Intel Arc B390 through PyTorch XPU for ACT training/inference;
+- real SO-101 follower actuation with encoder readback;
+- local HTTP pre-execution authority using the repository `ReferenceAuthorityEngine`;
+- `workspace_clear=false -> DENY / WORKSPACE_OCCUPIED -> no physical handoff`;
+- `workspace_clear=true -> ALLOW / POLICY_SATISFIED` with exact joint-action/envelope preservation;
+- one ACT-generated physical action with status `PHYSICALLY_VERIFIED`.
 
-**Intel supplies the physical-AI capability surface. Gatekeeper supplies the independent authority surface.**
+A later governed rollout completed 600 individually evaluated physical steps and reached `MAX_STEPS_REACHED`. This demonstrates endurance of the authority/execution path, **not** task success.
 
-The onsite story should visibly connect:
-
-```text
-Intel edge/physical-AI host
-  -> OpenVINO inference
-  -> Anomalib anomaly evidence when the trained workflow is available
-  -> Physical AI / VLA workflow
-  -> Gatekeeper authority
-  -> Intel robotics execution path
-  -> verified physical outcome
-```
-
-When each Intel component is used, show what it contributes. Put the OpenVINO runtime/device and inference result on screen. Show anomaly score/localization for the defect case. If Physical AI Studio and Robotics AI Suite are used onsite, show their actual workflow/runtime role rather than only naming them on a slide.
-
-The framing is complementary: Intel makes perception and physical execution fast and practical; Gatekeeper makes the resulting machine-speed action governable. See `docs/SPONSOR_SHOWCASE.md` for the exact presentation and evidence plan.
+See `docs/ONSITE_EVIDENCE.md` for the proof hash and before/target/after encoder values.
 
 ## Intel integration
 
-The software rehearsal exercises native OpenVINO inference and native MuJoCo dynamics. The onsite target is the event-provided Intel Physical AI stack, including the available camera path, OpenVINO/Anomalib detector workflow, LeRobot or event-selected VLA path, and robot runtime.
+Verified onsite:
 
-The Intel side supplies perception acceleration and physical-AI capability. Gatekeeper remains independent of the model and runtime. Swapping the detector, VLA or robot does not move the authority boundary.
+- **Intel Arc B390 / PyTorch XPU** — ACT training and inference;
+- **OpenVINO 2026.3** — runtime/integration bring-up;
+- **LeRobot 0.6.1** — ACT + SO-101 robot-control path;
+- **Physical AI Studio ecosystem** — event workflow/tooling context.
 
-## Current verified software rehearsal
+The MVTec PaDiM/OpenVINO artifact was used to prove the inference/runtime path; it was **not** a LEGO detector. Robotics AI Suite is not represented as independently verified in the final physical path.
 
-The repository contains a reproducible software rehearsal that uses:
+The authority boundary remains model- and runtime-independent. Swapping detector, policy or robot does not move the final pre-execution decision point.
 
-- rendered RGB evidence;
-- compiled native OpenVINO inference;
-- an explicitly labeled reference detector;
-- a scripted sorting planner;
-- the MIT-licensed local reference authority engine;
-- native MuJoCo physics;
-- an idealized Cartesian suction constraint;
-- post-action task verification;
-- chained decision, outcome and verification evidence.
+## Dataset finding and clean-v2 model
 
-This rehearsal proves the integration architecture and failure semantics. It does **not** claim that SO-101 or other event hardware, a trained Anomalib detector, a trained VLA or production Gatekeeper have already been verified. Those fields remain pending until onsite evidence exists.
+The first ten demonstration episodes were not equivalent training examples:
 
-## Demonstration sequence
+- episodes 0-2: effectively idle;
+- episodes 3-4: arm movement with negligible gripper signal;
+- episodes 5, 6, 8, 9: strongest manipulation/gripper signal;
+- episode 7: substantial arm movement but little gripper movement.
 
-The preferred live demonstration is deliberately short and visual.
+The first ACT model learned a narrow hold attractor from the mixed dataset. Clean-v2 retraining therefore uses episodes `[5,6,8,9]` and `n_action_steps=20` so the policy replans more frequently.
 
-### 1. Normal object
+This is an observed data-quality correction, not an authority failure.
 
-Show the camera frame and explicitly identify the Intel/OpenVINO inference path. Show the detector evidence and proposed accept action. Gatekeeper returns ALLOW. The robot performs the permitted action. A new observation confirms the object reached the expected destination. Show the linked decision and outcome receipts.
+## Current demonstration sequence
 
-### 2. Defective object
+The verified presentation should show:
 
-Show the visible defect and the anomaly score/localization from the onsite detector workflow. Treat that anomaly as evidence, not as an automatic authority violation. The planner proposes the reject destination. Gatekeeper authorizes the exact action when that transition remains admissible. The robot routes the object to reject and the post-action observation confirms the result.
+### 1. Learned proposal
 
-### 3. Overspeed proposal
+Show the real robot state/camera input, ACT proposal, bounded six-joint command and execution-envelope hash.
 
-Show a proposal above the configured movement limit. Gatekeeper returns TRANSFORM with a lower authorized speed. Demonstrate that only the transformed action reaches the actuator and report the measured execution speed separately from the proposed speed.
+### 2. DENY / no handoff
 
-### 4. Stale evidence
+Set the workspace interlock false and show:
 
-Reuse an otherwise valid proposal after its evidence exceeds the configured freshness window. The Intel perception and robotics capabilities remain available, but the evidence is no longer current enough for that state transition to remain admissible. Gatekeeper/dispatch HOLD the action and no movement starts.
+```text
+DENY
+WORKSPACE_OCCUPIED
+authorized_action = None
+```
 
-### 5. Authority unavailable
+No physical dispatch occurs.
 
-Show that loss of the authority endpoint produces HOLD with no actuator call. The failure is visible and receipt-bound rather than silently bypassed.
+### 3. ALLOW / exact binding
 
-## What judges should see in under one minute
+With the workspace actually clear and the operator approving motion, show the authority result:
 
-Intel's stack gives the system the ability to perceive and act at machine speed. The model proposes. The robot is capable. Gatekeeper constrains the system to the currently admissible transition set and can allow, transform or stop the physical effect. The system then proves which action was authorized before execution and records what happened afterward.
+```text
+ALLOW
+POLICY_SATISFIED
+```
+
+Verify that the returned authorized action preserves the exact joint command and envelope digest.
+
+### 4. Physical outcome
+
+Show before/target/after encoder values and `PHYSICALLY_VERIFIED` for the learned-policy physical step.
+
+### 5. Honest task boundary
+
+Show that the 600-step rollout was governed but did not complete the LEGO task, then explain the clean-v2 data correction. If the clean-v2 autonomous run later succeeds, add that proof as a new result rather than rewriting the earlier evidence.
+
+## Reproducible software rehearsal
+
+The repository also retains a native OpenVINO + MuJoCo rehearsal with reference detector/planner components. It proves deterministic authority semantics, TRANSFORM behavior, stale/replay handling, authority-unavailable fail-closed behavior and receipt-chain logic without requiring event hardware.
+
+Simulation and real-hardware evidence remain clearly labeled and should not be collapsed into one claim.
 
 ## Measurements
 
-Report measurements from the frozen final run only. Keep these categories separate:
+Keep measurement categories separate:
 
-- OpenVINO/perception inference latency;
+- ACT inference/device evidence;
+- OpenVINO runtime/inference evidence;
 - authority-service latency;
-- client/network elapsed time;
-- perception-to-authority end-to-end latency;
-- physical execution measurements;
-- post-action verification result;
-- test totals and failures from the exact final commit.
+- local client elapsed time;
+- physical command/encoder convergence;
+- test totals and CI results.
 
-Do not describe simulator wall-clock time as real robot cycle time. Do not convert UNKNOWN or partial physical outcomes into successes.
+Do not present simulator wall-clock time as robot cycle time. Do not convert `MAX_STEPS_REACHED`, `OPERATOR_ABORT`, blocked decisions or unknown outcomes into success.
 
 ## Security and failure semantics
 
-The repository is fail-closed at the authority boundary. Malformed service responses, unreachable authority, missing transformed actions, contradictory ALLOW responses, stale or future evidence, replayed capture identity, action/evidence rebinding, corrupted receipts and incomplete model output do not become executable commands.
+The repository is fail-closed at the authority boundary. Malformed service responses, unavailable authority, missing authorized actions, contradictory ALLOW responses, stale/future evidence, replay identity, action/evidence rebinding and corrupted receipts do not become executable commands.
 
-The local dispatcher can remove permission but never create permission. `dispatch_attempted` is distinct from `executed`, and actuator errors produce an unknown outcome rather than an invented successful execution.
+The local dispatcher may remove permission but does not create it. Actuation success is distinguished from dispatch attempt, and observed outcome is preserved separately.
 
-## Greenfield and license statement
+## IP and licensing
 
-This LabLab repository is a greenfield hackathon implementation licensed under MIT. Everything authored and committed in this repository is intended to be distributable under the repository MIT License. External runtimes and packages remain separately licensed dependencies and are not vendored or relicensed here.
+This LabLab repository is a greenfield MIT hackathon implementation. External runtimes and packages retain their own licenses.
 
-No source, assets, notebooks or model weights from the external LeRobot/MuJoCo tutorial are included. The tutorial was used only as a workflow reference. The implementation in this repository was independently authored against the project's own provider contracts.
-
-The proprietary Gatekeeper production/runtime source, proprietary policy corpus, credentials, private infrastructure and other undistributed OASSE technology are not in this repository. The live build consumes the production authority service only through the MIT-licensed HTTP adapter.
-
-## Event ecosystem credit
-
-AI Infra Summit, lablab.ai and Native are credited as the event/hackathon ecosystem that created the build environment and sponsor challenge. Keep this separate from the technical sponsor proof so the final presentation accurately attributes each party's role.
+The proprietary Gatekeeper production/runtime source, proprietary policy corpus, credentials, private infrastructure and other undistributed OASSE technology are not in this repository. The onsite verified hardware path used the repository `ReferenceAuthorityEngine`, not production Gatekeeper.
 
 ## Submission package
 
-A final submission should include:
+The final submission should include:
 
 - repository URL accessible to judges;
 - exact final commit SHA;
 - demo video URL;
-- concise project description;
-- architecture diagram or architecture section;
-- sponsor runtime evidence from `scripts/sponsor_showcase.py`;
-- reproducible run instructions;
-- final test count and CI status;
+- current `submission.json`;
+- architecture and judge one-pager;
+- CI/test status from the final commit;
 - native software rehearsal evidence;
-- onsite acceptance evidence for camera, trained detector, trained VLA, final pre-send interception and hardware runs;
-- production Gatekeeper contract probe if used in the live demonstration;
-- normal, defective, transformed and no-motion failure evidence;
+- `docs/ONSITE_EVIDENCE.md`;
+- physical proof/video for any autonomous LEGO success if achieved;
 - license/provenance statement.
 
 ## Claim boundary
 
-The strongest version of the project is the version supported by the final evidence. Before onsite hardware traces exist, describe the current state as a complete software rehearsal prepared for hardware binding. After hardware runs succeed, update only the claims directly proven by those traces. Do not collapse simulation, operator attestation and production-service verification into one undifferentiated claim.
+Current proven claim: **a trained ACT policy produced a real SO-101 command that passed through an independent pre-execution authority boundary, was exact-bound to its authorization, executed physically and was verified by encoder readback; an explicit denied case produced no physical handoff.**
 
-The invariant architecture is likewise a conceptual explanation of the existing implementation, not a claim that GOI has solved quantum gravity or that a single invariant uniquely determines every correct physical action.
+Current unproven claim: **full autonomous LEGO pick-and-drop task completion.**
+
+Do not collapse reference authority, production Gatekeeper, runtime bring-up models, autonomous task success and hardware-safety certification into one undifferentiated claim.

@@ -26,6 +26,13 @@ def parse_caps(value: str) -> list[float]:
     return caps
 
 
+def parse_camera_source(value: str) -> int | str:
+    try:
+        return int(value)
+    except ValueError:
+        return value
+
+
 def post_json(url: str, body: dict) -> dict:
     payload = json.dumps(body, separators=(",", ":"), allow_nan=False).encode()
     request = urllib.request.Request(
@@ -55,10 +62,17 @@ def main() -> int:
     parser.add_argument("--policy-dir", type=Path, required=True)
     parser.add_argument("--robot-port", required=True)
     parser.add_argument("--robot-id", required=True)
-    parser.add_argument("--camera-index", type=int, required=True)
+    parser.add_argument(
+        "--camera",
+        "--camera-index",
+        dest="camera",
+        required=True,
+        help="OpenCV camera index (for example 1) or device path (for example /dev/video1).",
+    )
     parser.add_argument("--camera-id", default="onsite-rgb-camera")
     parser.add_argument("--authority-url", default="http://127.0.0.1:8000/v1/evaluate")
     parser.add_argument("--task", default="Pick the large LEGO block and drop it in the pink bowl.")
+    parser.add_argument("--device", default="xpu", help="Torch/LeRobot policy device. Intel onsite default: xpu.")
     parser.add_argument("--caps", type=parse_caps, default=parse_caps("11.43,5,5,3.47,2.64,5"))
     parser.add_argument("--speed-mps", type=float, default=0.05)
     parser.add_argument("--workspace-clear", action="store_true")
@@ -76,12 +90,12 @@ def main() -> int:
     from lerobot.robots.so_follower import SO101Follower, SO101FollowerConfig
 
     policy = ACTPolicy.from_pretrained(args.policy_dir)
-    policy.to("xpu")
+    policy.to(args.device)
     policy.eval()
     pre, post = make_pre_post_processors(
         policy_cfg=policy.config,
         pretrained_path=args.policy_dir,
-        preprocessor_overrides={"device_processor": {"device": "xpu"}},
+        preprocessor_overrides={"device_processor": {"device": args.device}},
     )
 
     robot = SO101Follower(
@@ -94,9 +108,12 @@ def main() -> int:
     )
     robot.connect(calibrate=False)
 
+    camera_source = parse_camera_source(args.camera)
     proof: dict = {
-        "schema": "oasse.act-governed-single-step.v1",
+        "schema": "oasse.act-governed-single-step.v2",
         "policy": str(args.policy_dir),
+        "device": args.device,
+        "camera_source": str(camera_source),
         "workspace_clear": args.workspace_clear,
         "execute_requested": args.execute,
     }
@@ -105,14 +122,14 @@ def main() -> int:
         observation = robot.get_observation()
         state = torch.tensor([float(observation[key]) for key in JOINTS], dtype=torch.float32)
 
-        camera = cv2.VideoCapture(args.camera_index)
+        camera = cv2.VideoCapture(camera_source)
         camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         ok, frame = camera.read()
         captured_at_ms = int(time.time() * 1000)
         camera.release()
         if not ok or frame is None:
-            raise RuntimeError("CAMERA_READ_FAILED")
+            raise RuntimeError(f"CAMERA_READ_FAILED: {camera_source!r}")
 
         frame_hash = hashlib.sha256(frame.tobytes()).hexdigest()
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -149,7 +166,10 @@ def main() -> int:
             "target_label": "large_lego_block",
             "camera_id": args.camera_id,
             "frame_hash": frame_hash,
-            "metadata": {"source": "act-governed-single-step", "operator_interlock": True},
+            "metadata": {
+                "source": "act-governed-single-step",
+                "operator_interlock": args.workspace_clear,
+            },
         }
         action = {
             "action_id": action_id,
