@@ -26,6 +26,25 @@ def parse_caps(value: str) -> list[float]:
     return caps
 
 
+def parse_episode_ids(value: str) -> list[int]:
+    try:
+        episode_ids = [int(item.strip()) for item in value.split(",") if item.strip()]
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("--dataset-episodes must be comma-separated integers") from exc
+    if not episode_ids or any(episode_id < 0 for episode_id in episode_ids):
+        raise argparse.ArgumentTypeError("--dataset-episodes must contain non-negative episode IDs")
+    if len(set(episode_ids)) != len(episode_ids):
+        raise argparse.ArgumentTypeError("--dataset-episodes must not contain duplicates")
+    return episode_ids
+
+
+def parse_camera_source(value: str) -> int | str:
+    try:
+        return int(value)
+    except ValueError:
+        return value
+
+
 def post_json(url: str, body: dict) -> dict:
     payload = json.dumps(body, separators=(",", ":"), allow_nan=False).encode()
     request = urllib.request.Request(
@@ -50,16 +69,28 @@ def envelope_digest(action_id: str, evidence_id: str, joint_action: dict[str, fl
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Run a closed-loop ACT policy where every bounded SO-101 command receives a fresh authority decision."
+        description="Run a governed ACT rollout. Reaching max steps is recorded as incomplete, not task success."
     )
     parser.add_argument("--policy-dir", type=Path, required=True)
     parser.add_argument("--dataset-root", type=Path, required=True)
+    parser.add_argument(
+        "--dataset-episodes",
+        type=parse_episode_ids,
+        help="Optional comma-separated episode subset used to derive state/action safety ranges, e.g. 5,6,8,9.",
+    )
     parser.add_argument("--robot-port", required=True)
     parser.add_argument("--robot-id", required=True)
-    parser.add_argument("--camera-index", type=int, required=True)
+    parser.add_argument(
+        "--camera",
+        "--camera-index",
+        dest="camera",
+        required=True,
+        help="OpenCV camera index (for example 1) or device path (for example /dev/video1).",
+    )
     parser.add_argument("--camera-id", default="onsite-rgb-camera")
     parser.add_argument("--authority-url", default="http://127.0.0.1:8000/v1/evaluate")
     parser.add_argument("--task", default="Pick the large LEGO block and drop it in the pink bowl.")
+    parser.add_argument("--device", default="xpu", help="Torch/LeRobot policy device. Intel onsite default: xpu.")
     parser.add_argument("--caps", type=parse_caps, default=parse_caps("11.43,5,5,3.47,2.64,5"))
     parser.add_argument("--max-steps", type=int, default=600)
     parser.add_argument("--speed-mps", type=float, default=0.05)
@@ -86,20 +117,33 @@ def main() -> int:
     if not parquet_files:
         raise SystemExit(f"No parquet files found under {args.dataset_root / 'data'}")
     frames = pd.concat([pd.read_parquet(path) for path in parquet_files], ignore_index=True)
+
+    selected_episode_ids: list[int] | None = args.dataset_episodes
+    if selected_episode_ids is not None:
+        available = set(frames["episode_index"].astype(int).unique().tolist())
+        missing = sorted(set(selected_episode_ids) - available)
+        if missing:
+            raise SystemExit(f"Requested dataset episodes not present: {missing}")
+        frames = frames[frames["episode_index"].astype(int).isin(selected_episode_ids)].copy()
+        if frames.empty:
+            raise SystemExit("Selected dataset episode subset is empty")
+
     states = np.vstack(frames["observation.state"].apply(np.asarray))
     actions = np.vstack(frames["action"].apply(np.asarray))
+    if states.shape[1] != len(JOINTS) or actions.shape[1] != len(JOINTS):
+        raise SystemExit(f"Unexpected state/action dimensions: states={states.shape}, actions={actions.shape}")
     state_min, state_max = states.min(axis=0), states.max(axis=0)
     action_min, action_max = actions.min(axis=0), actions.max(axis=0)
 
     policy = ACTPolicy.from_pretrained(args.policy_dir)
-    policy.to("xpu")
+    policy.to(args.device)
     policy.eval()
     pre, post = make_pre_post_processors(
         policy_cfg=policy.config,
         pretrained_path=args.policy_dir,
-        preprocessor_overrides={"device_processor": {"device": "xpu"}},
+        preprocessor_overrides={"device_processor": {"device": args.device}},
     )
-    # Reset once per environment reset. select_action() then consumes the queued ACT chunk.
+    # Reset once per environment reset. select_action() then consumes the configured ACT action queue.
     policy.reset()
 
     robot = SO101Follower(
@@ -112,22 +156,28 @@ def main() -> int:
     )
     robot.connect(calibrate=False)
 
-    camera = cv2.VideoCapture(args.camera_index)
+    camera_source = parse_camera_source(args.camera)
+    camera = cv2.VideoCapture(camera_source)
     camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
     if not camera.isOpened():
         robot.disconnect()
-        raise RuntimeError("CAMERA_OPEN_FAILED")
+        raise RuntimeError(f"CAMERA_OPEN_FAILED: {camera_source!r}")
     for _ in range(3):
         camera.read()
 
     proof: dict = {
-        "schema": "oasse.act-governed-rollout.v1",
+        "schema": "oasse.act-governed-rollout.v2",
         "policy": str(args.policy_dir),
         "dataset": str(args.dataset_root),
+        "dataset_episodes": selected_episode_ids,
+        "device": args.device,
+        "camera_source": str(camera_source),
         "policy_chunk_size": policy.config.chunk_size,
         "policy_n_action_steps": policy.config.n_action_steps,
         "max_steps": args.max_steps,
+        "workspace_clear": args.workspace_clear,
+        "task_success": False,
         "steps": [],
         "status": "RUNNING",
         "started_at_ms": int(time.time() * 1000),
@@ -200,13 +250,16 @@ def main() -> int:
                 "evidence_id": evidence_id,
                 "captured_at_ms": captured_at_ms,
                 "confidence": 0.99,
-                "workspace_clear": True,
+                "workspace_clear": args.workspace_clear,
                 "anomaly_score": 0.0,
                 "target_label": "large_lego_block",
                 "camera_id": args.camera_id,
                 "frame_hash": frame_hash,
                 "frame_sequence": step_index + 1,
-                "metadata": {"source": "act-governed-rollout", "operator_interlock": True},
+                "metadata": {
+                    "source": "act-governed-rollout",
+                    "operator_interlock": args.workspace_clear,
+                },
             }
             action = {
                 "action_id": action_id,
@@ -289,13 +342,15 @@ def main() -> int:
             persist()
         else:
             proof["status"] = "MAX_STEPS_REACHED"
+            proof["completion_note"] = "Step budget exhausted without an integrated task-success signal."
+            return_code = 2
 
-        if proof["status"] == "RUNNING":
-            proof["status"] = "ROLLOUT_COMPLETE"
-        return_code = 0 if proof["status"] in {"ROLLOUT_COMPLETE", "MAX_STEPS_REACHED"} else 1
+        if proof["status"] != "MAX_STEPS_REACHED":
+            return_code = 1
     except KeyboardInterrupt:
         proof["status"] = "OPERATOR_ABORT"
-        return_code = 0
+        proof["completion_note"] = "Operator interrupted the rollout; task success is not inferred."
+        return_code = 130
     except Exception as exc:
         proof["status"] = "FAILED"
         proof["error"] = repr(exc)
@@ -305,7 +360,17 @@ def main() -> int:
         persist()
         camera.release()
         robot.disconnect()
-        print(json.dumps({"status": proof["status"], "steps": len(proof["steps"]), "output": str(args.output)}, indent=2))
+        print(
+            json.dumps(
+                {
+                    "status": proof["status"],
+                    "task_success": proof["task_success"],
+                    "steps": len(proof["steps"]),
+                    "output": str(args.output),
+                },
+                indent=2,
+            )
+        )
 
     return return_code
 
