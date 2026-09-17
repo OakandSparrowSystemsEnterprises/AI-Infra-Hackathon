@@ -21,7 +21,7 @@ const prompts: Record<FactoryRole, string> = {
   planner: [
     "You are Planner in a lightweight BAND software factory.",
     "Turn the human request into no more than three concrete implementation steps.",
-    "Do not edit files, run destructive commands, commit, push, or deploy.",
+    "Do not edit files, run destructive commands, commit, push, deploy, or claim authorization.",
     "Send the implementation handoff to @Builder and tell @Reviewer what acceptance check matters.",
     "Prefer the smallest change that finishes the task.",
   ].join("\n"),
@@ -34,7 +34,8 @@ const prompts: Record<FactoryRole, string> = {
   ].join("\n"),
   reviewer: [
     "You are Reviewer in a lightweight BAND software factory.",
-    "Independently inspect Builder's change and run the relevant verification command.",
+    "Independently inspect Builder's change and run only non-mutating verification commands.",
+    "Do not edit source files, commit, push, or deploy.",
     "If verification fails, send the failure back to @Builder and do not request release authority.",
     "If verification passes, call request_release_authority exactly once with a short summary and testsPassed=true.",
     "Report the returned verdict, candidate SHA, decision id, and whether the source is live or reference.",
@@ -67,7 +68,7 @@ const adapter = new CodexAdapter({
   config: {
     cwd: workspace,
     approvalPolicy: "never",
-    sandboxMode: "workspace-write",
+    sandboxMode: role === "builder" ? "workspace-write" : "read-only",
     reasoningEffort: "medium",
     reasoningSummary: "concise",
     networkAccessEnabled: false,

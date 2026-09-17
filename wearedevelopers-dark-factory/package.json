@@ -8,19 +8,22 @@
     "node": ">=22.14.0"
   },
   "scripts": {
+    "doctor": "tsx src/doctor.ts",
     "planner": "tsx src/agent.ts planner",
     "builder": "tsx src/agent.ts builder",
     "reviewer": "tsx src/agent.ts reviewer",
+    "factory": "tsx src/start.ts",
+    "start": "pnpm doctor && pnpm factory",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@band-ai/sdk": "0.4.1",
-    "@openai/codex-sdk": "latest",
-    "zod": "^3.25.0"
+    "@openai/codex-sdk": "^0.154.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
-    "tsx": "^4.20.0",
+    "tsx": "^4.23.13",
     "typescript": "^5.9.0"
   }
 }
