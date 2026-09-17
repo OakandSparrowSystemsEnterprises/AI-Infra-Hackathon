@@ -33,11 +33,9 @@ try {
   errors.push("FACTORY_WORKSPACE does not exist: " + workspace);
 }
 
-const codexCommand = process.platform === "win32" ? "codex.cmd" : "codex";
-const codex = spawnSync(codexCommand, ["--version"], {
-  encoding: "utf8",
-  windowsHide: true,
-});
+const codex = process.platform === "win32"
+  ? spawnSync("cmd.exe", ["/d", "/s", "/c", "codex", "--version"], { encoding: "utf8", windowsHide: true })
+  : spawnSync("codex", ["--version"], { encoding: "utf8" });
 
 if (codex.error || codex.status !== 0) {
   errors.push("Codex CLI is not available. Install @openai/codex globally and run codex login");
