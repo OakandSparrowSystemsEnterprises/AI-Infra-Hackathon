@@ -1,7 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 
 const roles = ["planner", "builder", "reviewer"] as const;
-const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const children = new Map<string, ChildProcess>();
 let stopping = false;
 
@@ -17,7 +16,12 @@ function stopAll(exitCode = 0): void {
 }
 
 for (const role of roles) {
-  const child = spawn(pnpm, ["run", role], {
+  const command = process.platform === "win32" ? "cmd.exe" : "pnpm";
+  const args = process.platform === "win32"
+    ? ["/d", "/s", "/c", "pnpm", "run", role]
+    : ["run", role];
+
+  const child = spawn(command, args, {
     cwd: process.cwd(),
     env: process.env,
     stdio: "inherit",
