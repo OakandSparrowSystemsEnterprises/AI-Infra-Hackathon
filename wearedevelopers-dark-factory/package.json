@@ -1,0 +1,26 @@
+{
+  "name": "oasse-dark-factory-lite",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.22.0",
+  "engines": {
+    "node": ">=22.14.0"
+  },
+  "scripts": {
+    "planner": "tsx src/agent.ts planner",
+    "builder": "tsx src/agent.ts builder",
+    "reviewer": "tsx src/agent.ts reviewer",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@band-ai/sdk": "0.4.1",
+    "@openai/codex-sdk": "latest",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}
